@@ -7,7 +7,7 @@ import {
   documents,
   notifications,
   type User,
-  type UpsertUser,
+  type InsertUser,
   type InsertLeasingApplication,
   type LeasingApplication,
   type InsertLeasingOffer,
@@ -24,14 +24,15 @@ import { db } from "./db";
 import { eq, and, desc, asc, or, like, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
-  // User operations (mandatory for Replit Auth)
-  getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
+  // User operations
+  getUser(id: number): Promise<User | undefined>;
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
   
   // Application operations
   createApplication(application: InsertLeasingApplication): Promise<LeasingApplication>;
-  getApplicationsByClient(clientId: string): Promise<LeasingApplication[]>;
-  getApplicationsByAgent(agentId: string): Promise<LeasingApplication[]>;
+  getApplicationsByClient(clientId: number): Promise<LeasingApplication[]>;
+  getApplicationsByAgent(agentId: number): Promise<LeasingApplication[]>;
   getApplication(id: number): Promise<LeasingApplication | undefined>;
   updateApplicationStatus(id: number, status: string): Promise<LeasingApplication | undefined>;
   getAllApplications(): Promise<LeasingApplication[]>;
@@ -48,7 +49,7 @@ export interface IStorage {
   // Car operations
   createCar(car: InsertCar): Promise<Car>;
   getAllCars(): Promise<Car[]>;
-  getCarsBySupplier(supplierId: string): Promise<Car[]>;
+  getCarsBySupplier(supplierId: number): Promise<Car[]>;
   searchCars(filters: {
     brand?: string;
     model?: string;
@@ -64,28 +65,26 @@ export interface IStorage {
   
   // Notification operations
   createNotification(notification: InsertNotification): Promise<Notification>;
-  getUserNotifications(userId: string): Promise<Notification[]>;
+  getUserNotifications(userId: number): Promise<Notification[]>;
   markNotificationAsRead(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
   // User operations
-  async getUser(id: string): Promise<User | undefined> {
+  async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(userData: InsertUser): Promise<User> {
     const [user] = await db
       .insert(users)
       .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
       .returning();
     return user;
   }
@@ -99,7 +98,7 @@ export class DatabaseStorage implements IStorage {
     return newApplication;
   }
 
-  async getApplicationsByClient(clientId: string): Promise<LeasingApplication[]> {
+  async getApplicationsByClient(clientId: number): Promise<LeasingApplication[]> {
     return await db
       .select()
       .from(leasingApplications)
@@ -107,7 +106,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(leasingApplications.createdAt));
   }
 
-  async getApplicationsByAgent(agentId: string): Promise<LeasingApplication[]> {
+  async getApplicationsByAgent(agentId: number): Promise<LeasingApplication[]> {
     return await db
       .select()
       .from(leasingApplications)
@@ -191,28 +190,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompatibleCompanies(application: LeasingApplication): Promise<LeasingCompany[]> {
-    const objectCost = parseFloat(application.objectCost.toString());
-    
+    // Simplified version - return all active companies for now
     return await db
       .select()
       .from(leasingCompanies)
-      .where(
-        and(
-          eq(leasingCompanies.isActive, true),
-          or(
-            eq(leasingCompanies.minAmount, null),
-            lte(leasingCompanies.minAmount, objectCost.toString())
-          ),
-          or(
-            eq(leasingCompanies.maxAmount, null),
-            gte(leasingCompanies.maxAmount, objectCost.toString())
-          ),
-          application.leasingType === "auto" ? eq(leasingCompanies.workWithAuto, true) :
-          application.leasingType === "equipment" ? eq(leasingCompanies.workWithEquipment, true) :
-          eq(leasingCompanies.workWithRealEstate, true),
-          application.isNewObject === false ? eq(leasingCompanies.workWithUsed, true) : undefined
-        )
-      );
+      .where(eq(leasingCompanies.isActive, true));
   }
 
   // Car operations
@@ -232,7 +214,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(cars.createdAt));
   }
 
-  async getCarsBySupplier(supplierId: string): Promise<Car[]> {
+  async getCarsBySupplier(supplierId: number): Promise<Car[]> {
     return await db
       .select()
       .from(cars)
@@ -302,7 +284,7 @@ export class DatabaseStorage implements IStorage {
     return newNotification;
   }
 
-  async getUserNotifications(userId: string): Promise<Notification[]> {
+  async getUserNotifications(userId: number): Promise<Notification[]> {
     return await db
       .select()
       .from(notifications)

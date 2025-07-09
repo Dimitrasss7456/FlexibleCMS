@@ -96,7 +96,10 @@ export default function Navigation() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  onClick={() => window.location.href = "/api/logout"}
+                  onClick={async () => {
+                    await fetch("/api/auth/logout", { method: "POST" });
+                    window.location.href = "/";
+                  }}
                 >
                   Выйти
                 </Button>
@@ -105,14 +108,14 @@ export default function Navigation() {
               <>
                 <Button 
                   variant="outline"
-                  onClick={() => window.location.href = "/api/login"}
+                  asChild
                 >
-                  Войти
+                  <Link href="/login">Войти</Link>
                 </Button>
                 <Button 
-                  onClick={() => window.location.href = "/api/login"}
+                  asChild
                 >
-                  Регистрация
+                  <Link href="/register">Регистрация</Link>
                 </Button>
               </>
             )}

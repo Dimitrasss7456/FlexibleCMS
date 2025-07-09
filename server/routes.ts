@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { getSession, isAuthenticated, requireRole, hashPassword, verifyPassword } from "./auth";
+import { loginSchema, registerSchema } from "@shared/schema";
 import { 
   insertLeasingApplicationSchema,
   insertLeasingOfferSchema,
@@ -12,15 +13,105 @@ import {
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  // Session middleware
+  app.use(getSession());
 
   // Auth routes
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const data = registerSchema.parse(req.body);
+      
+      // Check if username already exists
+      const existingUser = await storage.getUserByUsername(data.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Имя пользователя уже занято" });
+      }
+      
+      // Hash password
+      const hashedPassword = await hashPassword(data.password);
+      
+      // Create user
+      const user = await storage.createUser({
+        ...data,
+        password: hashedPassword,
+      });
+      
+      // Start session
+      req.session.userId = user.id;
+      req.session.userType = user.userType;
+      
+      res.json({ 
+        message: "Пользователь зарегистрирован", 
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          userType: user.userType,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email
+        } 
+      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(400).json({ message: "Ошибка регистрации" });
+    }
+  });
+
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const data = loginSchema.parse(req.body);
+      
+      const user = await storage.getUserByUsername(data.username);
+      if (!user) {
+        return res.status(401).json({ message: "Неверный логин или пароль" });
+      }
+      
+      const isValid = await verifyPassword(data.password, user.password);
+      if (!isValid) {
+        return res.status(401).json({ message: "Неверный логин или пароль" });
+      }
+      
+      // Start session
+      req.session.userId = user.id;
+      req.session.userType = user.userType;
+      
+      res.json({ 
+        message: "Успешный вход",
+        user: { 
+          id: user.id, 
+          username: user.username, 
+          userType: user.userType,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email
+        } 
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(401).json({ message: "Ошибка входа" });
+    }
+  });
+
+  app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Ошибка выхода" });
+      }
+      res.json({ message: "Вы вышли из системы" });
+    });
+  });
+
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      const user = req.user;
+      res.json({
+        id: user.id,
+        username: user.username,
+        userType: user.userType,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -30,7 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user profile
   app.patch('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const updates = req.body;
       
       const existingUser = await storage.getUser(userId);
@@ -38,7 +129,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const updatedUser = await storage.upsertUser({
+      // For updates, we'll use createUser with onConflictDoUpdate
+      const updatedUser = await storage.createUser({
         ...existingUser,
         ...updates,
         id: userId,
@@ -65,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create notifications for compatible company managers
       for (const company of companies) {
         await storage.createNotification({
-          userId: req.user?.claims?.sub || 'system',
+          userId: 1, // System notifications for now
           title: `Новая заявка на лизинг`,
           message: `Получена новая заявка на ${applicationData.leasingType} стоимостью ${applicationData.objectCost} руб.`,
           type: 'info'
@@ -81,20 +173,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/applications', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const user = req.user;
       
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
       let applications;
       if (user.userType === 'admin') {
         applications = await storage.getAllApplications();
       } else if (user.userType === 'agent') {
-        applications = await storage.getApplicationsByAgent(userId);
+        applications = await storage.getApplicationsByAgent(user.id);
       } else {
-        applications = await storage.getApplicationsByClient(userId);
+        applications = await storage.getApplicationsByClient(user.id);
       }
       
       res.json(applications);
@@ -114,12 +201,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check permissions
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const user = req.user;
       
-      if (user?.userType !== 'admin' && 
-          application.clientId !== userId && 
-          application.agentId !== userId) {
+      if (user.userType !== 'admin' && 
+          application.clientId !== user.id && 
+          application.agentId !== user.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       

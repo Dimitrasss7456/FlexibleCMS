@@ -26,14 +26,14 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table.
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// User storage table
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().notNull(),
+  id: serial("id").primaryKey(),
+  username: varchar("username").unique().notNull(),
+  password: varchar("password").notNull(),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
   userType: varchar("user_type").notNull().default("client"), // client, manager, supplier, agent, admin
   phone: varchar("phone"),
   inn: varchar("inn"),
@@ -46,8 +46,8 @@ export const users = pgTable("users", {
 
 export const leasingApplications = pgTable("leasing_applications", {
   id: serial("id").primaryKey(),
-  clientId: varchar("client_id").references(() => users.id).notNull(),
-  agentId: varchar("agent_id").references(() => users.id),
+  clientId: integer("client_id").references(() => users.id).notNull(),
+  agentId: integer("agent_id").references(() => users.id),
   objectCost: decimal("object_cost", { precision: 15, scale: 2 }).notNull(),
   downPayment: decimal("down_payment", { precision: 5, scale: 2 }).notNull(), // percentage
   leasingTerm: integer("leasing_term").notNull(), // months
@@ -83,7 +83,7 @@ export const leasingOffers = pgTable("leasing_offers", {
   id: serial("id").primaryKey(),
   applicationId: integer("application_id").references(() => leasingApplications.id).notNull(),
   companyId: integer("company_id").references(() => leasingCompanies.id).notNull(),
-  managerId: varchar("manager_id").references(() => users.id),
+  managerId: integer("manager_id").references(() => users.id),
   monthlyPayment: decimal("monthly_payment", { precision: 15, scale: 2 }).notNull(),
   firstPayment: decimal("first_payment", { precision: 15, scale: 2 }).notNull(),
   buyoutPayment: decimal("buyout_payment", { precision: 15, scale: 2 }).notNull(),
@@ -104,7 +104,7 @@ export const cars = pgTable("cars", {
   drive: varchar("drive"),
   status: varchar("status").default("available"), // available, sold, reserved
   isNew: boolean("is_new").default(true),
-  supplierId: varchar("supplier_id").references(() => users.id),
+  supplierId: integer("supplier_id").references(() => users.id),
   images: jsonb("images"),
   specifications: jsonb("specifications"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -117,13 +117,13 @@ export const documents = pgTable("documents", {
   fileName: varchar("file_name").notNull(),
   fileUrl: varchar("file_url").notNull(),
   documentType: varchar("document_type").notNull(),
-  uploadedBy: varchar("uploaded_by").references(() => users.id).notNull(),
+  uploadedBy: integer("uploaded_by").references(() => users.id).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
   title: varchar("title").notNull(),
   message: text("message").notNull(),
   type: varchar("type").notNull(), // info, success, warning, error
@@ -230,9 +230,27 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+// Auth schemas
+export const loginSchema = z.object({
+  username: z.string().min(3, "Логин должен содержать минимум 3 символа"),
+  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+});
+
+export const registerSchema = z.object({
+  username: z.string().min(3, "Логин должен содержать минимум 3 символа"),
+  password: z.string().min(6, "Пароль должен содержать минимум 6 символов"),
+  email: z.string().email("Неверный формат email").optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  userType: z.enum(["client", "manager", "supplier", "agent", "admin"]).default("client"),
+  phone: z.string().optional(),
+  inn: z.string().optional(),
+  companyName: z.string().optional(),
+});
+
 // Types
-export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
 export type InsertLeasingApplication = z.infer<typeof insertLeasingApplicationSchema>;
 export type LeasingApplication = typeof leasingApplications.$inferSelect;
 export type InsertLeasingOffer = z.infer<typeof insertLeasingOfferSchema>;
