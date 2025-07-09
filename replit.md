@@ -7,6 +7,7 @@ This is a full-stack leasing platform application built with Express.js, React, 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+Authentication system: Simple username/password instead of third-party auth (implemented).
 
 ## System Architecture
 
@@ -21,7 +22,7 @@ Preferred communication style: Simple, everyday language.
 ### Backend Architecture
 - **Framework**: Express.js with TypeScript
 - **Database ORM**: Drizzle ORM with PostgreSQL dialect
-- **Authentication**: Replit Auth integration with OpenID Connect
+- **Authentication**: Custom username/password authentication with bcrypt
 - **Session Management**: Express sessions with PostgreSQL store
 - **API Design**: RESTful API with structured error handling
 
@@ -29,17 +30,18 @@ Preferred communication style: Simple, everyday language.
 - **Primary Database**: PostgreSQL (configured for Neon Database)
 - **Schema Management**: Drizzle Kit for migrations and schema management
 - **Key Tables**: 
-  - Users (mandatory for Replit Auth)
-  - Sessions (mandatory for Replit Auth)
+  - Users (with username/password authentication)
+  - Sessions (for authentication state)
   - Leasing applications, offers, companies, cars, documents, notifications
 
 ## Key Components
 
 ### Authentication System
-- **Provider**: Replit Auth with OpenID Connect
-- **Session Storage**: PostgreSQL-backed sessions using connect-pg-simple
+- **Provider**: Custom username/password authentication with bcrypt hashing
+- **Session Storage**: PostgreSQL-backed sessions using express-session and connect-pg-simple
 - **User Types**: Client, Manager, Supplier, Agent, Admin
 - **Access Control**: Role-based access with authentication middleware
+- **Pages**: Dedicated login (/login) and registration (/register) pages
 
 ### Application Management
 - **Workflow**: Multi-step process from application submission to approval
@@ -60,7 +62,7 @@ Preferred communication style: Simple, everyday language.
 
 ## Data Flow
 
-1. **User Authentication**: Users authenticate via Replit Auth and are assigned roles
+1. **User Authentication**: Users authenticate via username/password and are assigned roles
 2. **Application Submission**: Clients submit leasing applications through forms
 3. **Offer Collection**: System distributes applications to compatible leasing companies
 4. **Offer Review**: Clients review and select from available offers
@@ -71,7 +73,7 @@ Preferred communication style: Simple, everyday language.
 ## External Dependencies
 
 ### Authentication & Infrastructure
-- **Replit Auth**: Primary authentication provider
+- **Custom Authentication**: Username/password with bcrypt encryption
 - **Neon Database**: PostgreSQL hosting service
 - **Replit Platform**: Development and deployment environment
 

@@ -29,17 +29,12 @@ export default function Register() {
 
   const registerMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("/api/auth/register", {
-        method: "POST",
-        body: JSON.stringify(data),
-        headers: { "Content-Type": "application/json" },
-      });
+      return apiRequest("POST", "/api/auth/register", data);
     },
     onSuccess: () => {
       toast({
         title: "Регистрация успешна",
         description: "Добро пожаловать в систему",
-        variant: "default",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       setLocation("/");
