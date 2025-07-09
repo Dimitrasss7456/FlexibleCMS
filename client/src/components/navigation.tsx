@@ -41,6 +41,13 @@ export default function Navigation() {
                     Каталог
                   </a>
                 </Link>
+                <Link href="/application">
+                  <a className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    location === "/application" ? "text-gray-900" : "text-gray-500 hover:text-primary"
+                  }`}>
+                    Подать заявку
+                  </a>
+                </Link>
                 <a href="#how-it-works" className="text-gray-500 hover:text-primary px-3 py-2 rounded-md text-sm font-medium">
                   Как это работает
                 </a>

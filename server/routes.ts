@@ -8,9 +8,14 @@ import {
   insertLeasingOfferSchema,
   insertCarSchema,
   insertDocumentSchema,
-  insertNotificationSchema
+  insertNotificationSchema,
+  users,
+  leasingCompanies
 } from "@shared/schema";
 import { z } from "zod";
+import { db } from "./db";
+import { eq, desc } from "drizzle-orm";
+import { parseCarCatalog } from "./carParser";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Session middleware
@@ -393,7 +398,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notification routes
   app.get('/api/notifications', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const notifications = await storage.getUserNotifications(userId);
       res.json(notifications);
     } catch (error) {
@@ -421,6 +426,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching companies:", error);
       res.status(500).json({ message: "Failed to fetch companies" });
+    }
+  });
+
+  // Admin routes
+  app.get('/api/admin/users', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+      res.json(allUsers.map(user => ({
+        ...user,
+        password: undefined // Remove password from response
+      })));
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get('/api/admin/companies', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const companies = await storage.getAllCompanies();
+      res.json(companies);
+    } catch (error) {
+      console.error("Error fetching companies:", error);
+      res.status(500).json({ message: "Failed to fetch companies" });
+    }
+  });
+
+  app.get('/api/admin/cars', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const cars = await storage.getAllCars();
+      res.json(cars);
+    } catch (error) {
+      console.error("Error fetching cars:", error);
+      res.status(500).json({ message: "Failed to fetch cars" });
+    }
+  });
+
+  app.post('/api/admin/companies', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const companyData = req.body;
+      const [newCompany] = await db
+        .insert(leasingCompanies)
+        .values(companyData)
+        .returning();
+      
+      res.json(newCompany);
+    } catch (error) {
+      console.error("Error creating company:", error);
+      res.status(500).json({ message: "Failed to create company" });
+    }
+  });
+
+  app.patch('/api/admin/users/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const userId = parseInt(req.params.id);
+      const updates = req.body;
+      
+      const [updatedUser] = await db
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, userId))
+        .returning();
+      
+      res.json({ ...updatedUser, password: undefined });
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  app.delete('/api/admin/users/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const userId = parseInt(req.params.id);
+      await db.delete(users).where(eq(users.id, userId));
+      
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // Car parser routes
+  app.post('/api/admin/parse-cars', isAuthenticated, async (req: any, res) => {
+    try {
+      if (req.user.userType !== 'admin') {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const { source, url } = req.body;
+      
+      // Simple car parser implementation
+      const parsedCars = await parseCarCatalog(source, url);
+      
+      // Save parsed cars to database
+      const savedCars = [];
+      for (const carData of parsedCars) {
+        const car = await storage.createCar({
+          ...carData,
+          supplierId: req.user.id
+        });
+        savedCars.push(car);
+      }
+      
+      res.json({ 
+        message: `Успешно загружено ${savedCars.length} автомобилей`,
+        cars: savedCars 
+      });
+    } catch (error) {
+      console.error("Error parsing cars:", error);
+      res.status(500).json({ message: "Failed to parse cars" });
     }
   });
 

@@ -1,417 +1,206 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
-import Navigation from "@/components/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Database, 
-  Edit, 
-  FileText, 
-  Settings, 
-  Users, 
-  Plus, 
-  Download,
-  Trash2
-} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAuth } from "@/hooks/useAuth";
+import { Link } from "wouter";
+import { Users, Building, FileText, Car, Database, Download, Settings, BarChart3 } from "lucide-react";
 
 export default function Admin() {
-  const { user, isAuthenticated, isLoading } = useAuth();
-  const { toast } = useToast();
+  const { user } = useAuth();
 
-  // Redirect to login if not authenticated or not admin
-  useEffect(() => {
-    if (!isLoading && (!isAuthenticated || user?.userType !== 'admin')) {
-      toast({
-        title: "Доступ запрещен",
-        description: "У вас нет прав доступа к административной панели",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/";
-      }, 500);
-      return;
-    }
-  }, [isAuthenticated, isLoading, user, toast]);
+  const { data: users = [] } = useQuery({
+    queryKey: ["/api/admin/users"],
+  });
 
-  const { data: applications = [], isLoading: applicationsLoading } = useQuery({
+  const { data: applications = [] } = useQuery({
     queryKey: ["/api/applications"],
-    enabled: !!user && user.userType === 'admin',
   });
 
   const { data: companies = [] } = useQuery({
-    queryKey: ["/api/companies"],
-    enabled: !!user && user.userType === 'admin',
+    queryKey: ["/api/admin/companies"],
   });
 
-  if (isLoading || !isAuthenticated || user?.userType !== 'admin') {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  const getStatusBadge = (status: string) => {
-    const statusMap = {
-      collecting_offers: { label: "Сбор предложений", variant: "secondary" as const },
-      reviewing_offers: { label: "Рассмотрение предложений", variant: "outline" as const },
-      collecting_documents: { label: "Сбор документов", variant: "default" as const },
-      document_review: { label: "Доработка документов", variant: "destructive" as const },
-      approved: { label: "Одобрено", variant: "default" as const, className: "bg-success text-white" },
-      rejected: { label: "Отказ", variant: "destructive" as const },
-      issued: { label: "Выдано", variant: "default" as const, className: "bg-success text-white" },
-    };
-
-    const config = statusMap[status as keyof typeof statusMap] || statusMap.collecting_offers;
-    return (
-      <Badge variant={config.variant} className={config.className}>
-        {config.label}
-      </Badge>
-    );
-  };
-
-  // Mock table structure for demonstration
-  const mockTableFields = [
-    { name: 'id', type: 'INTEGER', required: true, defaultValue: 'AUTO_INCREMENT' },
-    { name: 'client_inn', type: 'VARCHAR(12)', required: true, defaultValue: '' },
-    { name: 'object_cost', type: 'DECIMAL(15,2)', required: true, defaultValue: '' },
-    { name: 'status', type: 'VARCHAR(50)', required: true, defaultValue: 'collecting_offers' },
-    { name: 'created_at', type: 'TIMESTAMP', required: true, defaultValue: 'NOW()' },
-  ];
+  const { data: cars = [] } = useQuery({
+    queryKey: ["/api/admin/cars"],
+  });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navigation />
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Admin Header */}
-        <div className="bg-secondary text-white rounded-2xl p-6 mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Административная панель</h1>
-              <p className="text-gray-300">WordPress-подобное управление с расширенными возможностями</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-300 text-sm">Администратор</span>
-              <div className="w-10 h-10 bg-gray-600 rounded-full"></div>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Панель администратора</h1>
+          <p className="text-gray-600">Добро пожаловать, {user?.firstName || user?.username}</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Admin Sidebar */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardContent className="p-0">
-                <nav className="space-y-1">
-                  <a href="#dashboard" className="flex items-center px-4 py-3 text-sm font-medium text-white bg-primary rounded-lg">
-                    <Database className="mr-3 h-4 w-4" />
-                    Дашборд
-                  </a>
-                  <a href="#database" className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
-                    <Database className="mr-3 h-4 w-4" />
-                    База данных
-                  </a>
-                  <a href="#forms" className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
-                    <Edit className="mr-3 h-4 w-4" />
-                    Формы
-                  </a>
-                  <a href="#pages" className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
-                    <FileText className="mr-3 h-4 w-4" />
-                    Страницы
-                  </a>
-                  <a href="#parsers" className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
-                    <Settings className="mr-3 h-4 w-4" />
-                    Парсеры
-                  </a>
-                  <a href="#users" className="flex items-center px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">
-                    <Users className="mr-3 h-4 w-4" />
-                    Пользователи
-                  </a>
-                </nav>
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <Link href="/admin/database">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4">
+                  <Database className="h-10 w-10 text-blue-600" />
+                  <div>
+                    <h3 className="font-semibold">Управление БД</h3>
+                    <p className="text-sm text-gray-600">Пользователи, компании, автомобили</p>
+                  </div>
+                </div>
               </CardContent>
-            </Card>
-          </div>
+            </Link>
+          </Card>
 
-          {/* Admin Content */}
-          <div className="lg:col-span-3">
-            <Tabs defaultValue="database">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="database">База данных</TabsTrigger>
-                <TabsTrigger value="applications">Заявки</TabsTrigger>
-                <TabsTrigger value="companies">Компании</TabsTrigger>
-                <TabsTrigger value="settings">Настройки</TabsTrigger>
-              </TabsList>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <Link href="/admin/parser">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4">
+                  <Download className="h-10 w-10 text-green-600" />
+                  <div>
+                    <h3 className="font-semibold">Парсер данных</h3>
+                    <p className="text-sm text-gray-600">Загрузка автомобилей</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Link>
+          </Card>
 
-              <TabsContent value="database" className="mt-6">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle>Редактор базы данных</CardTitle>
-                      <div className="flex space-x-2">
-                        <Button size="sm">
-                          <Plus className="mr-2 h-4 w-4" />
-                          Добавить столбец
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Download className="mr-2 h-4 w-4" />
-                          Экспорт
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-gray-600">Управление структурой таблиц и данными</p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="mb-4">
-                      <h5 className="font-medium text-gray-900 mb-3">Таблица: leasing_applications</h5>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full bg-white border border-gray-200 rounded-lg">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Поле</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Тип</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Обязательное</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">По умолчанию</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Действия</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {mockTableFields.map((field, index) => (
-                            <tr key={index}>
-                              <td className="px-4 py-3">
-                                <Input value={field.name} className="text-sm" />
-                              </td>
-                              <td className="px-4 py-3">
-                                <Select defaultValue={field.type}>
-                                  <SelectTrigger className="text-sm">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="INTEGER">INTEGER</SelectItem>
-                                    <SelectItem value="VARCHAR">VARCHAR</SelectItem>
-                                    <SelectItem value="TEXT">TEXT</SelectItem>
-                                    <SelectItem value="DATE">DATE</SelectItem>
-                                    <SelectItem value="DECIMAL">DECIMAL</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </td>
-                              <td className="px-4 py-3">
-                                <input 
-                                  type="checkbox" 
-                                  checked={field.required} 
-                                  className="rounded"
-                                  readOnly
-                                />
-                              </td>
-                              <td className="px-4 py-3">
-                                <Input value={field.defaultValue} className="text-sm" />
-                              </td>
-                              <td className="px-4 py-3">
-                                <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-800">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="mt-4 flex justify-end space-x-2">
-                      <Button variant="outline">Отменить</Button>
-                      <Button>Сохранить изменения</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="applications" className="mt-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Управление заявками</CardTitle>
-                    <p className="text-gray-600">Просмотр и редактирование всех заявок в системе</p>
-                  </CardHeader>
-                  <CardContent>
-                    {applicationsLoading ? (
-                      <div className="space-y-4">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className="animate-pulse">
-                            <div className="h-16 bg-gray-200 rounded"></div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : applications.length === 0 ? (
-                      <div className="text-center py-8">
-                        <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                        <h3 className="mt-2 text-sm font-medium text-gray-900">Нет заявок</h3>
-                        <p className="mt-1 text-sm text-gray-500">Пока что заявки в системе отсутствуют</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full bg-white">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Заявка
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Клиент ИНН
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Сумма
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Статус
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Дата
-                              </th>
-                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Действия
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {applications.map((application: any) => (
-                              <tr key={application.id}>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  <div className="text-sm font-medium text-gray-900">#{application.id}</div>
-                                  <div className="text-sm text-gray-500">{application.leasingType}</div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                  {application.clientInn}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                  ₽{parseFloat(application.objectCost).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                  {getStatusBadge(application.status)}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                  {new Date(application.createdAt).toLocaleDateString('ru-RU')}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                  <Button variant="ghost" size="sm">
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="companies" className="mt-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Лизинговые компании</CardTitle>
-                    <p className="text-gray-600">Управление партнерами и их условиями</p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {companies.map((company: any) => (
-                        <Card key={company.id} className="relative">
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-medium text-gray-900">{company.name}</h4>
-                              <Badge variant={company.isActive ? "default" : "secondary"} className={company.isActive ? "bg-success text-white" : ""}>
-                                {company.isActive ? "Активна" : "Неактивна"}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-gray-600 mb-3">{company.description}</p>
-                            <div className="space-y-1 text-xs text-gray-500">
-                              {company.minAmount && (
-                                <p>Мин. сумма: ₽{parseFloat(company.minAmount).toLocaleString()}</p>
-                              )}
-                              {company.maxAmount && (
-                                <p>Макс. сумма: ₽{parseFloat(company.maxAmount).toLocaleString()}</p>
-                              )}
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {company.workWithAuto && <Badge variant="outline" className="text-xs">Авто</Badge>}
-                                {company.workWithEquipment && <Badge variant="outline" className="text-xs">Оборудование</Badge>}
-                                {company.workWithRealEstate && <Badge variant="outline" className="text-xs">Недвижимость</Badge>}
-                                {company.workWithUsed && <Badge variant="outline" className="text-xs">Б/У</Badge>}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="settings" className="mt-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Системные настройки</CardTitle>
-                    <p className="text-gray-600">Конфигурация системы и парсеров</p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-3">Настройки парсеров</h4>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                            <div>
-                              <h5 className="font-medium text-sm">Парсер автомобилей</h5>
-                              <p className="text-xs text-gray-500">Автоматическое обновление каталога автомобилей</p>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant="default" className="bg-success text-white">Активен</Badge>
-                              <Button variant="outline" size="sm">Настроить</Button>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                            <div>
-                              <h5 className="font-medium text-sm">Парсер оборудования</h5>
-                              <p className="text-xs text-gray-500">Обновление каталога промышленного оборудования</p>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant="secondary">Неактивен</Badge>
-                              <Button variant="outline" size="sm">Настроить</Button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className="font-medium text-gray-900 mb-3">Email уведомления</h4>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-gray-900">Уведомления о новых заявках</label>
-                            <input type="checkbox" defaultChecked className="rounded" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-gray-900">Уведомления о смене статуса</label>
-                            <input type="checkbox" defaultChecked className="rounded" />
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium text-gray-900">Ежедневные отчеты</label>
-                            <input type="checkbox" className="rounded" />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          </div>
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-4">
+                <BarChart3 className="h-10 w-10 text-purple-600" />
+                <div>
+                  <h3 className="font-semibold">Аналитика</h3>
+                  <p className="text-sm text-gray-600">Отчеты и статистика</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Всего пользователей</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{users.length}</div>
+              <p className="text-xs text-muted-foreground">Зарегистрированных пользователей</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Заявки</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{applications.length}</div>
+              <p className="text-xs text-muted-foreground">Лизинговых заявок</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Компании</CardTitle>
+              <Building className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{companies.length}</div>
+              <p className="text-xs text-muted-foreground">Лизинговых компаний</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Автомобили</CardTitle>
+              <Car className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{cars.length}</div>
+              <p className="text-xs text-muted-foreground">В каталоге</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Users */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Последние пользователи</CardTitle>
+            <CardDescription>Недавно зарегистрировавшиеся пользователи</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Пользователь</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Тип</TableHead>
+                  <TableHead>Дата регистрации</TableHead>
+                  <TableHead>Статус</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {users.slice(0, 5).map((user: any) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">
+                      {user.firstName && user.lastName 
+                        ? `${user.firstName} ${user.lastName}` 
+                        : user.username}
+                    </TableCell>
+                    <TableCell>{user.email || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{user.userType}</Badge>
+                    </TableCell>
+                    <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      <Badge variant={user.isActive ? "default" : "secondary"}>
+                        {user.isActive ? "Активен" : "Неактивен"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        {/* Recent Applications */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Последние заявки</CardTitle>
+            <CardDescription>Недавно поданные заявки на лизинг</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ID</TableHead>
+                  <TableHead>Клиент</TableHead>
+                  <TableHead>Сумма</TableHead>
+                  <TableHead>Тип</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>Дата</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {applications.slice(0, 5).map((app: any) => (
+                  <TableRow key={app.id}>
+                    <TableCell>#{app.id}</TableCell>
+                    <TableCell>{app.clientId}</TableCell>
+                    <TableCell>{parseFloat(app.objectCost).toLocaleString()} ₽</TableCell>
+                    <TableCell>{app.leasingType}</TableCell>
+                    <TableCell>
+                      <Badge>{app.status}</Badge>
+                    </TableCell>
+                    <TableCell>{new Date(app.createdAt).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

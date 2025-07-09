@@ -8,6 +8,9 @@ import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 import Admin from "@/pages/admin";
+import AdminDatabase from "@/pages/admin-database";
+import AdminParser from "@/pages/admin-parser";
+import ApplicationForm from "@/pages/application-form";
 import Catalog from "@/pages/catalog";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
@@ -29,7 +32,10 @@ function Router() {
           <Route path="/" component={Home} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/admin" component={Admin} />
+          <Route path="/admin/database" component={AdminDatabase} />
+          <Route path="/admin/parser" component={AdminParser} />
           <Route path="/catalog" component={Catalog} />
+          <Route path="/application" component={ApplicationForm} />
         </>
       )}
       <Route component={NotFound} />
