@@ -1,9 +1,25 @@
-// Database configuration for Replit environment
-// Using in-memory storage for development, can be switched to PostgreSQL later
-
 import * as schema from "@shared/schema";
 
-// For now, we'll use in-memory storage and bypass database initialization
-// The storage layer will handle all data operations
-export const db = null; // Placeholder - storage layer handles all operations
-export const pool = null; // Placeholder - not needed with in-memory storage
+// For now, keep the database disabled and use the MemStorage fallback
+// This ensures the app works without requiring PostgreSQL setup
+let db: any = null;
+let pool: any = null;
+
+// Enable database when DATABASE_URL is available
+if (process.env.DATABASE_URL) {
+  try {
+    const { Pool, neonConfig } = require('@neondatabase/serverless');
+    const { drizzle } = require('drizzle-orm/neon-serverless');
+    const ws = require("ws");
+    
+    neonConfig.webSocketConstructor = ws;
+    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    db = drizzle({ client: pool, schema });
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    db = null;
+    pool = null;
+  }
+}
+
+export { db, pool };

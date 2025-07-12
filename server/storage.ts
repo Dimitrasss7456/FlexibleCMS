@@ -1,4 +1,12 @@
 import {
+  users,
+  leasingApplications,
+  leasingOffers,
+  leasingCompanies,
+  cars,
+  documents,
+  notifications,
+  applicationMessages,
   type User,
   type InsertUser,
   type InsertLeasingApplication,
@@ -15,6 +23,8 @@ import {
   type ApplicationMessage,
   type LeasingCompany,
 } from "@shared/schema";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -85,39 +95,49 @@ export class MemStorage implements IStorage {
   private nextId = 1;
 
   constructor() {
-    // Initialize with some sample companies
+    this.initializeDemoData();
+  }
+
+  private async initializeDemoData() {
+    // Initialize with sample companies matching schema
     this.companies = [
       {
         id: 1,
         name: "AutoLeasing Pro",
         description: "Professional vehicle leasing services",
-        minAmount: 10000,
-        maxAmount: 500000,
-        isActive: true,
-        interestRate: 5.5,
+        logo: null,
+        minAmount: "10000",
+        maxAmount: "500000",
+        minTerm: 12,
+        maxTerm: 60,
+        interestRate: "5.5",
         maxLeasingTerm: 60,
-        requirements: JSON.stringify({
-          minCreditScore: 600,
-          minIncome: 30000,
-          documents: ["passport", "income"]
-        }),
-        createdAt: new Date().toISOString()
+        requirements: { minCreditScore: 600, minIncome: 30000, documents: ["passport", "income"] },
+        isActive: true,
+        workWithUsed: true,
+        workWithAuto: true,
+        workWithEquipment: true,
+        workWithRealEstate: false,
+        createdAt: new Date()
       },
       {
         id: 2,
         name: "FlexiLease Solutions",
         description: "Flexible leasing options for all needs",
-        minAmount: 5000,
-        maxAmount: 300000,
-        isActive: true,
-        interestRate: 6.0,
+        logo: null,
+        minAmount: "5000",
+        maxAmount: "300000",
+        minTerm: 6,
+        maxTerm: 48,
+        interestRate: "6.0",
         maxLeasingTerm: 48,
-        requirements: JSON.stringify({
-          minCreditScore: 550,
-          minIncome: 25000,
-          documents: ["passport", "income", "employment"]
-        }),
-        createdAt: new Date().toISOString()
+        requirements: { minCreditScore: 550, minIncome: 25000, documents: ["passport", "income", "employment"] },
+        isActive: true,
+        workWithUsed: true,
+        workWithAuto: true,
+        workWithEquipment: true,
+        workWithRealEstate: true,
+        createdAt: new Date()
       }
     ];
 
@@ -521,4 +541,271 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database storage implementation using Drizzle ORM
+export class DatabaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(insertUser)
+      .returning();
+    return user;
+  }
+
+  async createApplication(application: InsertLeasingApplication): Promise<LeasingApplication> {
+    const [app] = await db
+      .insert(leasingApplications)
+      .values(application)
+      .returning();
+    return app;
+  }
+
+  async getApplicationsByClient(clientId: number): Promise<LeasingApplication[]> {
+    return await db.select().from(leasingApplications).where(eq(leasingApplications.clientId, clientId));
+  }
+
+  async getApplicationsByAgent(agentId: number): Promise<LeasingApplication[]> {
+    return await db.select().from(leasingApplications).where(eq(leasingApplications.agentId, agentId));
+  }
+
+  async getApplication(id: number): Promise<LeasingApplication | undefined> {
+    const [app] = await db.select().from(leasingApplications).where(eq(leasingApplications.id, id));
+    return app || undefined;
+  }
+
+  async updateApplicationStatus(id: number, status: string): Promise<LeasingApplication | undefined> {
+    const [app] = await db
+      .update(leasingApplications)
+      .set({ status })
+      .where(eq(leasingApplications.id, id))
+      .returning();
+    return app || undefined;
+  }
+
+  async getAllApplications(): Promise<LeasingApplication[]> {
+    return await db.select().from(leasingApplications);
+  }
+
+  async createOffer(offer: InsertLeasingOffer): Promise<LeasingOffer> {
+    const [newOffer] = await db
+      .insert(leasingOffers)
+      .values(offer)
+      .returning();
+    return newOffer;
+  }
+
+  async getOffersByApplication(applicationId: number): Promise<LeasingOffer[]> {
+    return await db.select().from(leasingOffers).where(eq(leasingOffers.applicationId, applicationId));
+  }
+
+  async selectOffer(offerId: number): Promise<LeasingOffer | undefined> {
+    const [offer] = await db
+      .update(leasingOffers)
+      .set({ isSelected: true })
+      .where(eq(leasingOffers.id, offerId))
+      .returning();
+    return offer || undefined;
+  }
+
+  async getAllCompanies(): Promise<LeasingCompany[]> {
+    return await db.select().from(leasingCompanies);
+  }
+
+  async getCompatibleCompanies(application: LeasingApplication): Promise<LeasingCompany[]> {
+    return await db.select().from(leasingCompanies).where(eq(leasingCompanies.isActive, true));
+  }
+
+  async createCar(car: InsertCar): Promise<Car> {
+    const [newCar] = await db
+      .insert(cars)
+      .values(car)
+      .returning();
+    return newCar;
+  }
+
+  async getAllCars(): Promise<Car[]> {
+    return await db.select().from(cars);
+  }
+
+  async getCarsBySupplier(supplierId: number): Promise<Car[]> {
+    return await db.select().from(cars).where(eq(cars.supplierId, supplierId));
+  }
+
+  async searchCars(filters: {
+    brand?: string;
+    model?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    year?: number;
+    isNew?: boolean;
+  }): Promise<Car[]> {
+    return await db.select().from(cars);
+  }
+
+  async createDocument(document: InsertDocument): Promise<Document> {
+    const [newDoc] = await db
+      .insert(documents)
+      .values(document)
+      .returning();
+    return newDoc;
+  }
+
+  async getDocumentsByApplication(applicationId: number): Promise<Document[]> {
+    return await db.select().from(documents).where(eq(documents.applicationId, applicationId));
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db
+      .insert(notifications)
+      .values(notification)
+      .returning();
+    return newNotification;
+  }
+
+  async getUserNotifications(userId: number): Promise<Notification[]> {
+    return await db.select().from(notifications).where(eq(notifications.userId, userId));
+  }
+
+  async markNotificationAsRead(id: number): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ isRead: true })
+      .where(eq(notifications.id, id));
+  }
+
+  async createApplicationMessage(message: InsertApplicationMessage): Promise<ApplicationMessage> {
+    const [newMessage] = await db
+      .insert(applicationMessages)
+      .values(message)
+      .returning();
+    return newMessage;
+  }
+
+  async getApplicationMessages(applicationId: number): Promise<ApplicationMessage[]> {
+    return await db.select().from(applicationMessages).where(eq(applicationMessages.applicationId, applicationId));
+  }
+
+  async approveApplication(id: number, adminId: number): Promise<LeasingApplication | undefined> {
+    const [app] = await db
+      .update(leasingApplications)
+      .set({ status: 'approved_by_admin' })
+      .where(eq(leasingApplications.id, id))
+      .returning();
+    
+    if (app) {
+      await this.createApplicationMessage({
+        applicationId: id,
+        senderId: adminId,
+        message: 'Заявка одобрена администратором и передана менеджерам для формирования предложений',
+        isSystemMessage: true
+      });
+      
+      await this.sendApplicationToManagers(id);
+    }
+    
+    return app || undefined;
+  }
+
+  async rejectApplication(id: number, adminId: number, reason: string): Promise<LeasingApplication | undefined> {
+    const [app] = await db
+      .update(leasingApplications)
+      .set({ status: 'rejected' })
+      .where(eq(leasingApplications.id, id))
+      .returning();
+    
+    if (app) {
+      await this.createApplicationMessage({
+        applicationId: id,
+        senderId: adminId,
+        message: `Заявка отклонена администратором. Причина: ${reason}`,
+        isSystemMessage: true
+      });
+      
+      await this.createNotification({
+        userId: app.clientId,
+        title: 'Заявка отклонена',
+        message: `Ваша заявка №${id} была отклонена. Причина: ${reason}`,
+        type: 'error'
+      });
+    }
+    
+    return app || undefined;
+  }
+
+  async sendApplicationToManagers(applicationId: number): Promise<void> {
+    const application = await this.getApplication(applicationId);
+    if (!application) return;
+
+    const managers = await this.getAllManagers();
+    const compatibleCompanies = await this.getCompatibleCompanies(application);
+    
+    for (const manager of managers) {
+      const hasCompatibleCompany = compatibleCompanies.some(company => 
+        company.name === manager.companyName
+      );
+      
+      if (hasCompatibleCompany) {
+        await this.createNotification({
+          userId: manager.id,
+          title: 'Новая заявка',
+          message: `Поступила новая заявка №${applicationId} на сумму ${application.objectCost} руб.`,
+          type: 'info'
+        });
+      }
+    }
+    
+    await this.updateApplicationStatus(applicationId, 'collecting_offers');
+  }
+
+  async getAllManagers(): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.userType, 'manager'));
+  }
+}
+
+// Create a simplified fallback storage that throws helpful errors
+class FallbackStorage implements IStorage {
+  private throwNotImplemented(method: string): never {
+    throw new Error(`${method} requires DATABASE_URL to be configured. Please set up a PostgreSQL database.`);
+  }
+
+  async getUser(): Promise<User | undefined> { this.throwNotImplemented('getUser'); }
+  async getUserByUsername(): Promise<User | undefined> { this.throwNotImplemented('getUserByUsername'); }
+  async createUser(): Promise<User> { this.throwNotImplemented('createUser'); }
+  async createApplication(): Promise<LeasingApplication> { this.throwNotImplemented('createApplication'); }
+  async getApplicationsByClient(): Promise<LeasingApplication[]> { this.throwNotImplemented('getApplicationsByClient'); }
+  async getApplicationsByAgent(): Promise<LeasingApplication[]> { this.throwNotImplemented('getApplicationsByAgent'); }
+  async getApplication(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('getApplication'); }
+  async updateApplicationStatus(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('updateApplicationStatus'); }
+  async getAllApplications(): Promise<LeasingApplication[]> { this.throwNotImplemented('getAllApplications'); }
+  async createOffer(): Promise<LeasingOffer> { this.throwNotImplemented('createOffer'); }
+  async getOffersByApplication(): Promise<LeasingOffer[]> { this.throwNotImplemented('getOffersByApplication'); }
+  async selectOffer(): Promise<LeasingOffer | undefined> { this.throwNotImplemented('selectOffer'); }
+  async getAllCompanies(): Promise<LeasingCompany[]> { this.throwNotImplemented('getAllCompanies'); }
+  async getCompatibleCompanies(): Promise<LeasingCompany[]> { this.throwNotImplemented('getCompatibleCompanies'); }
+  async createCar(): Promise<Car> { this.throwNotImplemented('createCar'); }
+  async getAllCars(): Promise<Car[]> { this.throwNotImplemented('getAllCars'); }
+  async getCarsBySupplier(): Promise<Car[]> { this.throwNotImplemented('getCarsBySupplier'); }
+  async searchCars(): Promise<Car[]> { this.throwNotImplemented('searchCars'); }
+  async createDocument(): Promise<Document> { this.throwNotImplemented('createDocument'); }
+  async getDocumentsByApplication(): Promise<Document[]> { this.throwNotImplemented('getDocumentsByApplication'); }
+  async createNotification(): Promise<Notification> { this.throwNotImplemented('createNotification'); }
+  async getUserNotifications(): Promise<Notification[]> { this.throwNotImplemented('getUserNotifications'); }
+  async markNotificationAsRead(): Promise<void> { this.throwNotImplemented('markNotificationAsRead'); }
+  async createApplicationMessage(): Promise<ApplicationMessage> { this.throwNotImplemented('createApplicationMessage'); }
+  async getApplicationMessages(): Promise<ApplicationMessage[]> { this.throwNotImplemented('getApplicationMessages'); }
+  async approveApplication(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('approveApplication'); }
+  async rejectApplication(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('rejectApplication'); }
+  async sendApplicationToManagers(): Promise<void> { this.throwNotImplemented('sendApplicationToManagers'); }
+  async getAllManagers(): Promise<User[]> { this.throwNotImplemented('getAllManagers'); }
+}
+
+export const storage = (process.env.DATABASE_URL && db) ? new DatabaseStorage() : new MemStorage();
