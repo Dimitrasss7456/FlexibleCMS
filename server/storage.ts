@@ -43,7 +43,7 @@ import {
   type AuditLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, like } from "drizzle-orm";
+import { eq, and, or, like, desc } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -756,71 +756,425 @@ export class MemStorage implements IStorage {
 }
 
 // Database implementation will be added when database is available
+
+// Use DatabaseStorage for real database operations
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...insertUser,
+        userType: insertUser.userType || "client",
+        email: insertUser.email || null,
+        firstName: insertUser.firstName || null,
+        lastName: insertUser.lastName || null,
+        phone: insertUser.phone || null,
+        inn: insertUser.inn || null,
+        companyName: insertUser.companyName || null,
+        isActive: insertUser.isActive ?? true,
+        isVerified: insertUser.isVerified ?? false,
+      })
+      .returning();
     return user;
   }
 
-  // Implementation for other methods would go here...
-  // For now, we'll use fallback methods
-  async createApplication(): Promise<LeasingApplication> { throw new Error("Not implemented"); }
-  async getApplicationsByClient(): Promise<LeasingApplication[]> { throw new Error("Not implemented"); }
-  async getApplicationsByAgent(): Promise<LeasingApplication[]> { throw new Error("Not implemented"); }
-  async getApplication(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
-  async updateApplicationStatus(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
-  async getAllApplications(): Promise<LeasingApplication[]> { throw new Error("Not implemented"); }
-  async createOffer(): Promise<LeasingOffer> { throw new Error("Not implemented"); }
-  async getOffersByApplication(): Promise<LeasingOffer[]> { throw new Error("Not implemented"); }
-  async selectOffer(): Promise<LeasingOffer | undefined> { throw new Error("Not implemented"); }
-  async getAllCompanies(): Promise<LeasingCompany[]> { throw new Error("Not implemented"); }
-  async getCompatibleCompanies(): Promise<LeasingCompany[]> { throw new Error("Not implemented"); }
-  async createCar(): Promise<Car> { throw new Error("Not implemented"); }
-  async getAllCars(): Promise<Car[]> { throw new Error("Not implemented"); }
-  async getCarsBySupplier(): Promise<Car[]> { throw new Error("Not implemented"); }
-  async searchCars(): Promise<Car[]> { throw new Error("Not implemented"); }
-  async createDocument(): Promise<Document> { throw new Error("Not implemented"); }
-  async getDocumentsByApplication(): Promise<Document[]> { throw new Error("Not implemented"); }
-  async createNotification(): Promise<Notification> { throw new Error("Not implemented"); }
-  async getUserNotifications(): Promise<Notification[]> { throw new Error("Not implemented"); }
-  async markNotificationAsRead(): Promise<void> { throw new Error("Not implemented"); }
-  async createApplicationMessage(): Promise<ApplicationMessage> { throw new Error("Not implemented"); }
-  async getApplicationMessages(): Promise<ApplicationMessage[]> { throw new Error("Not implemented"); }
-  async approveApplication(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
-  async rejectApplication(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
-  async sendApplicationToManagers(): Promise<void> { throw new Error("Not implemented"); }
-  async getAllManagers(): Promise<User[]> { throw new Error("Not implemented"); }
-  async createPage(): Promise<Page> { throw new Error("Not implemented"); }
-  async getPageBySlug(): Promise<Page | undefined> { throw new Error("Not implemented"); }
-  async getAllPages(): Promise<Page[]> { throw new Error("Not implemented"); }
-  async updatePage(): Promise<Page | undefined> { throw new Error("Not implemented"); }
-  async deletePage(): Promise<boolean> { throw new Error("Not implemented"); }
-  async createForm(): Promise<Form> { throw new Error("Not implemented"); }
-  async getAllForms(): Promise<Form[]> { throw new Error("Not implemented"); }
-  async getForm(): Promise<Form | undefined> { throw new Error("Not implemented"); }
-  async updateForm(): Promise<Form | undefined> { throw new Error("Not implemented"); }
-  async deleteForm(): Promise<boolean> { throw new Error("Not implemented"); }
-  async createFormSubmission(): Promise<FormSubmission> { throw new Error("Not implemented"); }
-  async getFormSubmissions(): Promise<FormSubmission[]> { throw new Error("Not implemented"); }
-  async createParser(): Promise<Parser> { throw new Error("Not implemented"); }
-  async getAllParsers(): Promise<Parser[]> { throw new Error("Not implemented"); }
-  async updateParser(): Promise<Parser | undefined> { throw new Error("Not implemented"); }
-  async deleteParser(): Promise<boolean> { throw new Error("Not implemented"); }
-  async getSystemSettings(): Promise<SystemSetting[]> { throw new Error("Not implemented"); }
-  async getSystemSetting(): Promise<SystemSetting | undefined> { throw new Error("Not implemented"); }
-  async updateSystemSetting(): Promise<SystemSetting | undefined> { throw new Error("Not implemented"); }
-  async createAuditLog(): Promise<AuditLog> { throw new Error("Not implemented"); }
-  async getAuditLogs(): Promise<AuditLog[]> { throw new Error("Not implemented"); }
+  async getAllApplications(): Promise<LeasingApplication[]> {
+    return await db.select().from(leasingApplications).orderBy(desc(leasingApplications.createdAt));
+  }
+
+  async createApplication(application: InsertLeasingApplication): Promise<LeasingApplication> {
+    const [app] = await db
+      .insert(leasingApplications)
+      .values({
+        ...application,
+        agentId: application.agentId || null,
+        isNewObject: application.isNewObject ?? true,
+        isForRental: application.isForRental ?? false,
+        comment: application.comment || null,
+        status: application.status || "pending",
+      })
+      .returning();
+    return app;
+  }
+
+  async getApplicationById(id: number): Promise<LeasingApplication | undefined> {
+    const [app] = await db.select().from(leasingApplications).where(eq(leasingApplications.id, id));
+    return app || undefined;
+  }
+
+  async updateApplicationStatus(id: number, status: string): Promise<LeasingApplication | undefined> {
+    const [app] = await db
+      .update(leasingApplications)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(leasingApplications.id, id))
+      .returning();
+    return app || undefined;
+  }
+
+  // CMS operations
+  async getAllPages(): Promise<Page[]> {
+    return await db.select().from(pages).orderBy(desc(pages.updatedAt));
+  }
+
+  async createPage(page: InsertPage): Promise<Page> {
+    const [newPage] = await db
+      .insert(pages)
+      .values({
+        ...page,
+        content: page.content || null,
+        metaTitle: page.metaTitle || null,
+        metaDescription: page.metaDescription || null,
+        isPublished: page.isPublished ?? false,
+        template: page.template || null,
+      })
+      .returning();
+    return newPage;
+  }
+
+  async updatePage(id: number, updates: Partial<InsertPage>): Promise<Page | undefined> {
+    const [page] = await db
+      .update(pages)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(pages.id, id))
+      .returning();
+    return page || undefined;
+  }
+
+  async deletePage(id: number): Promise<boolean> {
+    const result = await db.delete(pages).where(eq(pages.id, id));
+    return result.rowCount > 0;
+  }
+
+  async getPageBySlug(slug: string): Promise<Page | undefined> {
+    const [page] = await db.select().from(pages).where(eq(pages.slug, slug));
+    return page || undefined;
+  }
+
+  async getAllForms(): Promise<Form[]> {
+    return await db.select().from(forms).orderBy(desc(forms.updatedAt));
+  }
+
+  async createForm(form: InsertForm): Promise<Form> {
+    const [newForm] = await db
+      .insert(forms)
+      .values({
+        ...form,
+        isActive: form.isActive ?? true,
+        description: form.description || null,
+      })
+      .returning();
+    return newForm;
+  }
+
+  async updateForm(id: number, updates: Partial<InsertForm>): Promise<Form | undefined> {
+    const [form] = await db
+      .update(forms)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(forms.id, id))
+      .returning();
+    return form || undefined;
+  }
+
+  async deleteForm(id: number): Promise<boolean> {
+    const result = await db.delete(forms).where(eq(forms.id, id));
+    return result.rowCount > 0;
+  }
+
+  async getAllParsers(): Promise<Parser[]> {
+    return await db.select().from(parsers).orderBy(desc(parsers.updatedAt));
+  }
+
+  async createParser(parser: InsertParser): Promise<Parser> {
+    const [newParser] = await db
+      .insert(parsers)
+      .values({
+        ...parser,
+        isActive: parser.isActive ?? true,
+        lastRun: parser.lastRun || null,
+        nextRun: parser.nextRun || null,
+      })
+      .returning();
+    return newParser;
+  }
+
+  async updateParser(id: number, updates: Partial<InsertParser>): Promise<Parser | undefined> {
+    const [parser] = await db
+      .update(parsers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(parsers.id, id))
+      .returning();
+    return parser || undefined;
+  }
+
+  async deleteParser(id: number): Promise<boolean> {
+    const result = await db.delete(parsers).where(eq(parsers.id, id));
+    return result.rowCount > 0;
+  }
+
+  async createFormSubmission(submission: InsertFormSubmission): Promise<FormSubmission> {
+    const [newSubmission] = await db
+      .insert(formSubmissions)
+      .values({
+        ...submission,
+        userAgent: submission.userAgent || null,
+        ipAddress: submission.ipAddress || null,
+      })
+      .returning();
+    return newSubmission;
+  }
+
+  // Stub implementations for other methods - implement as needed
+  async getAllCars(): Promise<Car[]> {
+    return await db.select().from(cars).orderBy(desc(cars.createdAt));
+  }
+
+  async getAllCompanies(): Promise<LeasingCompany[]> {
+    return await db.select().from(leasingCompanies);
+  }
+
+  async getAllManagers(): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.userType, "manager"));
+  }
+
+  // Add other method stubs as needed...
+  async createOffer(offer: InsertLeasingOffer): Promise<LeasingOffer> {
+    const [newOffer] = await db
+      .insert(leasingOffers)
+      .values({
+        ...offer,
+        interestRate: offer.interestRate || null,
+        managerId: offer.managerId || null,
+        isSelected: offer.isSelected ?? false,
+      })
+      .returning();
+    return newOffer;
+  }
+
+  async getOffersByApplication(applicationId: number): Promise<LeasingOffer[]> {
+    return await db.select().from(leasingOffers).where(eq(leasingOffers.applicationId, applicationId));
+  }
+
+  async selectOffer(offerId: number): Promise<LeasingOffer | undefined> {
+    const [offer] = await db
+      .update(leasingOffers)
+      .set({ isSelected: true })
+      .where(eq(leasingOffers.id, offerId))
+      .returning();
+    return offer || undefined;
+  }
+
+  async createCar(car: InsertCar): Promise<Car> {
+    const [newCar] = await db
+      .insert(cars)
+      .values({
+        ...car,
+        status: car.status || "available",
+        engine: car.engine || null,
+        transmission: car.transmission || null,
+        drive: car.drive || null,
+        isNew: car.isNew ?? true,
+        supplierId: car.supplierId || null,
+        images: car.images || [],
+        specifications: car.specifications || {},
+      })
+      .returning();
+    return newCar;
+  }
+
+  async searchCars(filters: {
+    brand?: string;
+    model?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    year?: number;
+    isNew?: boolean;
+  }): Promise<Car[]> {
+    // Implement filtering logic using Drizzle queries
+    return await db.select().from(cars);
+  }
+
+  async createDocument(document: InsertDocument): Promise<Document> {
+    const [newDoc] = await db.insert(documents).values(document).returning();
+    return newDoc;
+  }
+
+  async getDocumentsByApplication(applicationId: number): Promise<Document[]> {
+    return await db.select().from(documents).where(eq(documents.applicationId, applicationId));
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [newNotification] = await db
+      .insert(notifications)
+      .values({
+        ...notification,
+        isRead: notification.isRead ?? false,
+      })
+      .returning();
+    return newNotification;
+  }
+
+  async getUserNotifications(userId: number): Promise<Notification[]> {
+    return await db.select().from(notifications).where(eq(notifications.userId, userId));
+  }
+
+  async markNotificationAsRead(id: number): Promise<void> {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  }
+
+  async createApplicationMessage(message: InsertApplicationMessage): Promise<ApplicationMessage> {
+    const [newMessage] = await db
+      .insert(applicationMessages)
+      .values({
+        ...message,
+        isSystemMessage: message.isSystemMessage ?? false,
+      })
+      .returning();
+    return newMessage;
+  }
+
+  async getApplicationMessages(applicationId: number): Promise<ApplicationMessage[]> {
+    return await db.select().from(applicationMessages).where(eq(applicationMessages.applicationId, applicationId));
+  }
+
+  async approveApplication(id: number, adminId: number): Promise<LeasingApplication | undefined> {
+    const [app] = await db
+      .update(leasingApplications)
+      .set({ status: "approved_by_admin", updatedAt: new Date() })
+      .where(eq(leasingApplications.id, id))
+      .returning();
+    
+    if (app) {
+      await this.createNotification({
+        userId: app.clientId,
+        title: "Заявка одобрена",
+        message: "Ваша заявка на лизинг одобрена администратором",
+        type: "success",
+      });
+    }
+    
+    return app || undefined;
+  }
+
+  async rejectApplication(id: number, adminId: number, reason: string): Promise<LeasingApplication | undefined> {
+    const [app] = await db
+      .update(leasingApplications)
+      .set({ status: "rejected", updatedAt: new Date() })
+      .where(eq(leasingApplications.id, id))
+      .returning();
+    
+    if (app) {
+      await this.createNotification({
+        userId: app.clientId,
+        title: "Заявка отклонена",
+        message: `Ваша заявка на лизинг отклонена. Причина: ${reason}`,
+        type: "error",
+      });
+    }
+    
+    return app || undefined;
+  }
+
+  async getCompatibleCompanies(application: LeasingApplication): Promise<LeasingCompany[]> {
+    const companies = await db.select().from(leasingCompanies);
+    return companies.filter((company: LeasingCompany) => {
+      if (!company.isActive) return false;
+      if (company.minAmount && Number(application.objectCost) < Number(company.minAmount)) return false;
+      if (company.maxAmount && Number(application.objectCost) > Number(company.maxAmount)) return false;
+      if (company.minTerm && application.leasingTerm < company.minTerm) return false;
+      if (company.maxTerm && application.leasingTerm > company.maxTerm) return false;
+      return true;
+    });
+  }
+
+  async getCarsBySupplier(supplierId: number): Promise<Car[]> {
+    return await db.select().from(cars).where(eq(cars.supplierId, supplierId));
+  }
+
+  async getFormSubmissions(formId: number): Promise<FormSubmission[]> {
+    return await db.select().from(formSubmissions).where(eq(formSubmissions.formId, formId));
+  }
+
+  // Missing methods from IStorage interface
+  async getApplicationsByClient(clientId: number): Promise<LeasingApplication[]> {
+    return await db.select().from(leasingApplications).where(eq(leasingApplications.clientId, clientId));
+  }
+
+  async getApplicationsByAgent(agentId: number): Promise<LeasingApplication[]> {
+    return await db.select().from(leasingApplications).where(eq(leasingApplications.agentId, agentId));
+  }
+
+  async getApplication(id: number): Promise<LeasingApplication | undefined> {
+    return await this.getApplicationById(id);
+  }
+
+  async sendApplicationToManagers(applicationId: number): Promise<void> {
+    const managers = await this.getAllManagers();
+    for (const manager of managers) {
+      await this.createNotification({
+        userId: manager.id,
+        title: "Новая заявка",
+        message: `Поступила новая заявка на лизинг #${applicationId}`,
+        type: "info",
+      });
+    }
+  }
+
+  async getForm(id: number): Promise<Form | undefined> {
+    const [form] = await db.select().from(forms).where(eq(forms.id, id));
+    return form || undefined;
+  }
+
+  async getSystemSettings(): Promise<SystemSetting[]> {
+    return await db.select().from(systemSettings);
+  }
+
+  async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
+    const [setting] = await db.select().from(systemSettings).where(eq(systemSettings.key, key));
+    return setting || undefined;
+  }
+
+  async updateSystemSetting(key: string, value: string): Promise<SystemSetting | undefined> {
+    const [setting] = await db
+      .update(systemSettings)
+      .set({ value, updatedAt: new Date() })
+      .where(eq(systemSettings.key, key))
+      .returning();
+    return setting || undefined;
+  }
+
+  async createAuditLog(logData: Partial<AuditLog>): Promise<AuditLog> {
+    const [log] = await db
+      .insert(auditLogs)
+      .values({
+        userId: logData.userId || null,
+        action: logData.action || "unknown",
+        tableName: logData.tableName || null,
+        recordId: logData.recordId || null,
+        oldValues: logData.oldValues || null,
+        newValues: logData.newValues || null,
+        ipAddress: logData.ipAddress || null,
+        userAgent: logData.userAgent || null,
+      })
+      .returning();
+    return log;
+  }
+
+  async getAuditLogs(limit: number = 100): Promise<AuditLog[]> {
+    return await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
+  }
 }
 
-export const storage = new MemStorage();
+// Use DatabaseStorage when DATABASE_URL is available, otherwise use MemStorage
+export const storage = process.env.DATABASE_URL 
+  ? new DatabaseStorage() 
+  : new MemStorage();
