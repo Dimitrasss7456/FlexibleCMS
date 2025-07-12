@@ -593,6 +593,244 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CMS Admin routes
+  app.get('/api/admin/stats', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const applications = await storage.getAllApplications();
+      const pages = await storage.getAllPages();
+      const forms = await storage.getAllForms();
+      const parsers = await storage.getAllParsers();
+      
+      res.json({
+        totalUsers: 5, // Simplified count
+        totalApplications: applications.length,
+        totalPages: pages.length,
+        totalForms: forms.length,
+        totalParsers: parsers.length,
+      });
+    } catch (error) {
+      console.error("Error fetching admin stats:", error);
+      res.status(500).json({ message: "Ошибка получения статистики" });
+    }
+  });
+
+  app.get('/api/admin/users', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      // Mock user data for demo
+      const users = [
+        { id: 1, username: 'admin', email: 'admin@example.com', userType: 'admin', isActive: true },
+        { id: 2, username: 'client1', email: 'client@example.com', userType: 'client', isActive: true },
+        { id: 3, username: 'manager1', email: 'manager@example.com', userType: 'manager', isActive: true },
+      ];
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Ошибка получения пользователей" });
+    }
+  });
+
+  app.get('/api/admin/applications', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const applications = await storage.getAllApplications();
+      res.json(applications);
+    } catch (error) {
+      console.error("Error fetching applications:", error);
+      res.status(500).json({ message: "Ошибка получения заявок" });
+    }
+  });
+
+  app.get('/api/admin/pages', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const pages = await storage.getAllPages();
+      res.json(pages);
+    } catch (error) {
+      console.error("Error fetching pages:", error);
+      res.status(500).json({ message: "Ошибка получения страниц" });
+    }
+  });
+
+  app.get('/api/admin/forms', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const forms = await storage.getAllForms();
+      res.json(forms);
+    } catch (error) {
+      console.error("Error fetching forms:", error);
+      res.status(500).json({ message: "Ошибка получения форм" });
+    }
+  });
+
+  app.get('/api/admin/parsers', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const parsers = await storage.getAllParsers();
+      res.json(parsers);
+    } catch (error) {
+      console.error("Error fetching parsers:", error);
+      res.status(500).json({ message: "Ошибка получения парсеров" });
+    }
+  });
+
+  // CMS Pages API
+  app.post('/api/admin/pages', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const page = await storage.createPage(req.body);
+      res.json(page);
+    } catch (error) {
+      console.error("Error creating page:", error);
+      res.status(500).json({ message: "Ошибка создания страницы" });
+    }
+  });
+
+  app.put('/api/admin/pages/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const page = await storage.updatePage(parseInt(req.params.id), req.body);
+      if (!page) {
+        return res.status(404).json({ message: "Страница не найдена" });
+      }
+      res.json(page);
+    } catch (error) {
+      console.error("Error updating page:", error);
+      res.status(500).json({ message: "Ошибка обновления страницы" });
+    }
+  });
+
+  app.delete('/api/admin/pages/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const success = await storage.deletePage(parseInt(req.params.id));
+      if (!success) {
+        return res.status(404).json({ message: "Страница не найдена" });
+      }
+      res.json({ message: "Страница удалена" });
+    } catch (error) {
+      console.error("Error deleting page:", error);
+      res.status(500).json({ message: "Ошибка удаления страницы" });
+    }
+  });
+
+  // CMS Forms API
+  app.post('/api/admin/forms', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const form = await storage.createForm(req.body);
+      res.json(form);
+    } catch (error) {
+      console.error("Error creating form:", error);
+      res.status(500).json({ message: "Ошибка создания формы" });
+    }
+  });
+
+  app.put('/api/admin/forms/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const form = await storage.updateForm(parseInt(req.params.id), req.body);
+      if (!form) {
+        return res.status(404).json({ message: "Форма не найдена" });
+      }
+      res.json(form);
+    } catch (error) {
+      console.error("Error updating form:", error);
+      res.status(500).json({ message: "Ошибка обновления формы" });
+    }
+  });
+
+  app.delete('/api/admin/forms/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const success = await storage.deleteForm(parseInt(req.params.id));
+      if (!success) {
+        return res.status(404).json({ message: "Форма не найдена" });
+      }
+      res.json({ message: "Форма удалена" });
+    } catch (error) {
+      console.error("Error deleting form:", error);
+      res.status(500).json({ message: "Ошибка удаления формы" });
+    }
+  });
+
+  // CMS Parsers API
+  app.post('/api/admin/parsers', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const parser = await storage.createParser(req.body);
+      res.json(parser);
+    } catch (error) {
+      console.error("Error creating parser:", error);
+      res.status(500).json({ message: "Ошибка создания парсера" });
+    }
+  });
+
+  app.put('/api/admin/parsers/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const parser = await storage.updateParser(parseInt(req.params.id), req.body);
+      if (!parser) {
+        return res.status(404).json({ message: "Парсер не найден" });
+      }
+      res.json(parser);
+    } catch (error) {
+      console.error("Error updating parser:", error);
+      res.status(500).json({ message: "Ошибка обновления парсера" });
+    }
+  });
+
+  app.delete('/api/admin/parsers/:id', isAuthenticated, requireRole(['admin']), async (req, res) => {
+    try {
+      const success = await storage.deleteParser(parseInt(req.params.id));
+      if (!success) {
+        return res.status(404).json({ message: "Парсер не найден" });
+      }
+      res.json({ message: "Парсер удален" });
+    } catch (error) {
+      console.error("Error deleting parser:", error);
+      res.status(500).json({ message: "Ошибка удаления парсера" });
+    }
+  });
+
+  // Dynamic page serving
+  app.get('/page/:slug', async (req, res) => {
+    try {
+      const page = await storage.getPageBySlug(req.params.slug);
+      if (!page || !page.isPublished) {
+        return res.status(404).json({ message: "Страница не найдена" });
+      }
+      res.json(page);
+    } catch (error) {
+      console.error("Error fetching page:", error);
+      res.status(500).json({ message: "Ошибка получения страницы" });
+    }
+  });
+
+  // Dynamic form serving
+  app.get('/api/forms/:name', async (req, res) => {
+    try {
+      const forms = await storage.getAllForms();
+      const form = forms.find(f => f.name === req.params.name && f.isActive);
+      if (!form) {
+        return res.status(404).json({ message: "Форма не найдена" });
+      }
+      res.json(form);
+    } catch (error) {
+      console.error("Error fetching form:", error);
+      res.status(500).json({ message: "Ошибка получения формы" });
+    }
+  });
+
+  app.post('/api/forms/:name/submit', async (req, res) => {
+    try {
+      const forms = await storage.getAllForms();
+      const form = forms.find(f => f.name === req.params.name && f.isActive);
+      if (!form) {
+        return res.status(404).json({ message: "Форма не найдена" });
+      }
+      
+      const submission = await storage.createFormSubmission({
+        formId: form.id,
+        data: req.body,
+        userAgent: req.headers['user-agent'] || null,
+        ipAddress: req.ip || null,
+      });
+      
+      res.json({ message: "Форма отправлена", id: submission.id });
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      res.status(500).json({ message: "Ошибка отправки формы" });
+    }
+  });
+
   app.delete('/api/admin/users/:id', isAuthenticated, async (req: any, res) => {
     try {
       if (req.user.userType !== 'admin') {

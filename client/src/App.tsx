@@ -11,6 +11,7 @@ import Admin from "@/pages/admin";
 import AdminDatabase from "@/pages/admin-database";
 import AdminParser from "@/pages/admin-parser";
 import AdminApplications from "@/pages/admin-applications";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
 import ApplicationDetail from "@/pages/application-detail";
 import ManagerDashboard from "@/pages/manager-dashboard";
 import ApplicationForm from "@/pages/application-form";
@@ -35,6 +36,7 @@ function Router() {
           <Route path="/" component={Home} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/admin" component={Admin} />
+          <Route path="/admin/dashboard" component={AdminDashboard} />
           <Route path="/admin/database" component={AdminDatabase} />
           <Route path="/admin/parser" component={AdminParser} />
           <Route path="/admin/applications" component={AdminApplications} />

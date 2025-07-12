@@ -9,6 +9,7 @@ import {
   integer,
   decimal,
   boolean,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -140,6 +141,103 @@ export const leasingCompanies = pgTable("leasing_companies", {
   workWithAuto: boolean("work_with_auto").default(true),
   workWithEquipment: boolean("work_with_equipment").default(true),
   workWithRealEstate: boolean("work_with_real_estate").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// CMS Tables for dynamic content management
+export const pages = pgTable("pages", {
+  id: serial("id").primaryKey(),
+  title: varchar("title").notNull(),
+  slug: varchar("slug").unique().notNull(),
+  content: text("content"),
+  metaTitle: varchar("meta_title"),
+  metaDescription: text("meta_description"),
+  isPublished: boolean("is_published").default(false),
+  template: varchar("template").default("default"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const forms = pgTable("forms", {
+  id: serial("id").primaryKey(),
+  name: varchar("name").notNull(),
+  title: varchar("title").notNull(),
+  description: text("description"),
+  fields: jsonb("fields").notNull(), // Dynamic form fields configuration
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const formSubmissions = pgTable("form_submissions", {
+  id: serial("id").primaryKey(),
+  formId: integer("form_id").references(() => forms.id).notNull(),
+  data: jsonb("data").notNull(),
+  userAgent: text("user_agent"),
+  ipAddress: varchar("ip_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const parsers = pgTable("parsers", {
+  id: serial("id").primaryKey(),
+  name: varchar("name").notNull(),
+  sourceUrl: varchar("source_url").notNull(),
+  isActive: boolean("is_active").default(true),
+  config: jsonb("config").notNull(), // Parser configuration
+  lastRun: timestamp("last_run"),
+  nextRun: timestamp("next_run"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const parserRuns = pgTable("parser_runs", {
+  id: serial("id").primaryKey(),
+  parserId: integer("parser_id").references(() => parsers.id).notNull(),
+  status: varchar("status").notNull().default("running"), // running, completed, failed
+  itemsProcessed: integer("items_processed").default(0),
+  errors: text("errors"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const tableSchema = pgTable("table_schema", {
+  id: serial("id").primaryKey(),
+  tableName: varchar("table_name").notNull(),
+  columnName: varchar("column_name").notNull(),
+  dataType: varchar("data_type").notNull(),
+  isNullable: boolean("is_nullable").default(true),
+  defaultValue: varchar("default_value"),
+  constraints: jsonb("constraints"),
+  displayName: varchar("display_name"),
+  isVisible: boolean("is_visible").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  unique("table_column_unique").on(table.tableName, table.columnName),
+]);
+
+export const systemSettings = pgTable("system_settings", {
+  id: serial("id").primaryKey(),
+  key: varchar("key").unique().notNull(),
+  value: text("value"),
+  type: varchar("type").notNull().default("string"), // string, number, boolean, json
+  description: text("description"),
+  category: varchar("category").default("general"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  action: varchar("action").notNull(),
+  tableName: varchar("table_name"),
+  recordId: integer("record_id"),
+  oldValues: jsonb("old_values"),
+  newValues: jsonb("new_values"),
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -278,6 +376,36 @@ export const registerSchema = z.object({
   companyName: z.string().optional(),
 });
 
+// CMS Insert schemas
+export const insertPageSchema = createInsertSchema(pages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFormSchema = createInsertSchema(forms).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFormSubmissionSchema = createInsertSchema(formSubmissions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertParserSchema = createInsertSchema(parsers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
@@ -294,3 +422,18 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertApplicationMessage = z.infer<typeof insertApplicationMessageSchema>;
 export type ApplicationMessage = typeof applicationMessages.$inferSelect;
 export type LeasingCompany = typeof leasingCompanies.$inferSelect;
+
+// CMS Types
+export type Page = typeof pages.$inferSelect;
+export type InsertPage = z.infer<typeof insertPageSchema>;
+export type Form = typeof forms.$inferSelect;
+export type InsertForm = z.infer<typeof insertFormSchema>;
+export type FormSubmission = typeof formSubmissions.$inferSelect;
+export type InsertFormSubmission = z.infer<typeof insertFormSubmissionSchema>;
+export type Parser = typeof parsers.$inferSelect;
+export type InsertParser = z.infer<typeof insertParserSchema>;
+export type ParserRun = typeof parserRuns.$inferSelect;
+export type TableSchema = typeof tableSchema.$inferSelect;
+export type SystemSetting = typeof systemSettings.$inferSelect;
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;

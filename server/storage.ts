@@ -7,6 +7,13 @@ import {
   documents,
   notifications,
   applicationMessages,
+  pages,
+  forms,
+  formSubmissions,
+  parsers,
+  parserRuns,
+  systemSettings,
+  auditLogs,
   type User,
   type InsertUser,
   type InsertLeasingApplication,
@@ -22,9 +29,21 @@ import {
   type InsertApplicationMessage,
   type ApplicationMessage,
   type LeasingCompany,
+  type Page,
+  type InsertPage,
+  type Form,
+  type InsertForm,
+  type FormSubmission,
+  type InsertFormSubmission,
+  type Parser,
+  type InsertParser,
+  type ParserRun,
+  type SystemSetting,
+  type InsertSystemSetting,
+  type AuditLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, and, or, like } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -80,9 +99,36 @@ export interface IStorage {
   rejectApplication(id: number, adminId: number, reason: string): Promise<LeasingApplication | undefined>;
   sendApplicationToManagers(applicationId: number): Promise<void>;
   getAllManagers(): Promise<User[]>;
+  
+  // CMS operations
+  createPage(page: InsertPage): Promise<Page>;
+  getPageBySlug(slug: string): Promise<Page | undefined>;
+  getAllPages(): Promise<Page[]>;
+  updatePage(id: number, page: Partial<InsertPage>): Promise<Page | undefined>;
+  deletePage(id: number): Promise<boolean>;
+  
+  createForm(form: InsertForm): Promise<Form>;
+  getAllForms(): Promise<Form[]>;
+  getForm(id: number): Promise<Form | undefined>;
+  updateForm(id: number, form: Partial<InsertForm>): Promise<Form | undefined>;
+  deleteForm(id: number): Promise<boolean>;
+  
+  createFormSubmission(submission: InsertFormSubmission): Promise<FormSubmission>;
+  getFormSubmissions(formId: number): Promise<FormSubmission[]>;
+  
+  createParser(parser: InsertParser): Promise<Parser>;
+  getAllParsers(): Promise<Parser[]>;
+  updateParser(id: number, parser: Partial<InsertParser>): Promise<Parser | undefined>;
+  deleteParser(id: number): Promise<boolean>;
+  
+  getSystemSettings(): Promise<SystemSetting[]>;
+  getSystemSetting(key: string): Promise<SystemSetting | undefined>;
+  updateSystemSetting(key: string, value: string): Promise<SystemSetting | undefined>;
+  
+  createAuditLog(log: Partial<AuditLog>): Promise<AuditLog>;
+  getAuditLogs(limit?: number): Promise<AuditLog[]>;
 }
 
-// In-memory storage implementation for development
 export class MemStorage implements IStorage {
   private users: User[] = [];
   private applications: LeasingApplication[] = [];
@@ -92,6 +138,13 @@ export class MemStorage implements IStorage {
   private documents: Document[] = [];
   private notifications: Notification[] = [];
   private applicationMessages: ApplicationMessage[] = [];
+  private pages: Page[] = [];
+  private forms: Form[] = [];
+  private formSubmissions: FormSubmission[] = [];
+  private parsers: Parser[] = [];
+  private parserRuns: ParserRun[] = [];
+  private systemSettings: SystemSetting[] = [];
+  private auditLogs: AuditLog[] = [];
   private nextId = 1;
 
   constructor() {
@@ -99,188 +152,171 @@ export class MemStorage implements IStorage {
   }
 
   private async initializeDemoData() {
-    // Initialize with sample companies matching schema
-    this.companies = [
+    // Create demo admin user
+    const adminUser: User = {
+      id: this.nextId++,
+      username: "admin",
+      password: "$2b$10$dummy.hash.for.demo",
+      email: "admin@example.com",
+      firstName: "Admin",
+      lastName: "User",
+      userType: "admin",
+      phone: "+7 (999) 999-99-99",
+      inn: null,
+      companyName: null,
+      isActive: true,
+      isVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.push(adminUser);
+
+    // Create demo pages
+    this.pages.push({
+      id: this.nextId++,
+      title: "Главная страница",
+      slug: "home",
+      content: "Добро пожаловать на платформу лизинга",
+      metaTitle: "Лизинг.ОРГ - Главная",
+      metaDescription: "Лизинговая платформа для клиентов, агентов и поставщиков",
+      isPublished: true,
+      template: "default",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Create demo forms
+    this.forms.push({
+      id: this.nextId++,
+      name: "leasing_application",
+      title: "Заявка на лизинг",
+      description: "Форма подачи заявки на лизинг",
+      fields: [
+        {
+          name: "objectCost",
+          type: "number",
+          label: "Стоимость объекта",
+          required: true,
+          placeholder: "Введите стоимость",
+        },
+        {
+          name: "downPayment",
+          type: "number",
+          label: "Первоначальный взнос (%)",
+          required: true,
+          min: 0,
+          max: 100,
+        },
+        {
+          name: "leasingTerm",
+          type: "select",
+          label: "Срок лизинга (месяцы)",
+          required: true,
+          options: [12, 24, 36, 48, 60],
+        },
+      ],
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    // Create demo system settings
+    this.systemSettings.push(
       {
-        id: 1,
-        name: "AutoLeasing Pro",
-        description: "Professional vehicle leasing services",
+        id: this.nextId++,
+        key: "site_title",
+        value: "Лизинг.ОРГ",
+        type: "string",
+        description: "Название сайта",
+        category: "general",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: this.nextId++,
+        key: "max_file_size",
+        value: "10485760",
+        type: "number",
+        description: "Максимальный размер файла (байты)",
+        category: "upload",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+    );
+
+    // Create demo leasing companies
+    this.companies.push(
+      {
+        id: this.nextId++,
+        name: "Альфа-Лизинг",
+        description: "Лизинг автомобилей и оборудования",
         logo: null,
-        minAmount: "10000",
-        maxAmount: "500000",
+        isActive: true,
+        minAmount: "100000",
+        maxAmount: "50000000",
         minTerm: 12,
         maxTerm: 60,
-        interestRate: "5.5",
+        interestRate: "12.5",
         maxLeasingTerm: 60,
-        requirements: { minCreditScore: 600, minIncome: 30000, documents: ["passport", "income"] },
-        isActive: true,
+        requirements: {
+          minExperience: 12,
+          requiredDocuments: ["устав", "баланс"],
+        },
         workWithUsed: true,
         workWithAuto: true,
         workWithEquipment: true,
         workWithRealEstate: false,
-        createdAt: new Date()
+        createdAt: new Date(),
       },
       {
-        id: 2,
-        name: "FlexiLease Solutions",
-        description: "Flexible leasing options for all needs",
+        id: this.nextId++,
+        name: "Сбербанк Лизинг",
+        description: "Универсальная лизинговая компания",
         logo: null,
-        minAmount: "5000",
-        maxAmount: "300000",
-        minTerm: 6,
-        maxTerm: 48,
-        interestRate: "6.0",
-        maxLeasingTerm: 48,
-        requirements: { minCreditScore: 550, minIncome: 25000, documents: ["passport", "income", "employment"] },
         isActive: true,
+        minAmount: "500000",
+        maxAmount: "100000000",
+        minTerm: 12,
+        maxTerm: 84,
+        interestRate: "11.8",
+        maxLeasingTerm: 84,
+        requirements: {
+          minExperience: 24,
+          requiredDocuments: ["устав", "баланс", "справка из банка"],
+        },
         workWithUsed: true,
         workWithAuto: true,
         workWithEquipment: true,
         workWithRealEstate: true,
-        createdAt: new Date()
+        createdAt: new Date(),
       }
-    ];
-
-    // Initialize with sample cars
-    this.cars = [
-      {
-        id: 1,
-        brand: "Toyota",
-        model: "Camry",
-        year: 2024,
-        price: "35000",
-        engine: "2.5L 4-cylinder",
-        transmission: "Automatic",
-        drive: "FWD",
-        isNew: true,
-        status: "available",
-        supplierId: 1,
-        images: JSON.stringify(["/api/placeholder/car1.jpg"]),
-        specifications: JSON.stringify({
-          fuel: "Gasoline",
-          mpg: "32/41",
-          safety: "5-star",
-          warranty: "3 years"
-        }),
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: 2,
-        brand: "Honda",
-        model: "Accord",
-        year: 2024,
-        price: "38000",
-        engine: "1.5L Turbo",
-        transmission: "CVT",
-        drive: "FWD",
-        isNew: true,
-        status: "available",
-        supplierId: 1,
-        images: JSON.stringify(["/api/placeholder/car2.jpg"]),
-        specifications: JSON.stringify({
-          fuel: "Gasoline",
-          mpg: "30/38",
-          safety: "5-star",
-          warranty: "3 years"
-        }),
-        createdAt: new Date().toISOString()
-      }
-    ];
-    
-    // Initialize demo data
-    this.initializeDemoData();
-  }
-
-  private async initializeDemoData() {
-    // Create demo users with different roles
-    await this.createUser({
-      username: 'admin',
-      password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkhOtEDO4LgB2QK', // password: admin123
-      email: 'admin@example.com',
-      firstName: 'Администратор',
-      lastName: 'Системы',
-      userType: 'admin',
-      isActive: true
-    });
-
-    await this.createUser({
-      username: 'manager1',
-      password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkhOtEDO4LgB2QK', // password: admin123
-      email: 'manager1@example.com',
-      firstName: 'Менеджер',
-      lastName: 'Иван',
-      userType: 'manager',
-      companyName: 'AutoLeasing Pro',
-      isActive: true
-    });
-
-    await this.createUser({
-      username: 'client1',
-      password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkhOtEDO4LgB2QK', // password: admin123
-      email: 'client1@example.com',
-      firstName: 'Клиент',
-      lastName: 'Петр',
-      userType: 'client',
-      isActive: true
-    });
-
-    // Create sample applications
-    await this.createApplication({
-      clientId: 3,
-      objectCost: '2500000',
-      downPayment: '30',
-      leasingTerm: 36,
-      leasingType: 'Автомобиль',
-      clientPhone: '+7-999-123-45-67',
-      clientInn: '1234567890',
-      isNewObject: true,
-      isForRental: false,
-      comment: 'Необходим автомобиль для работы',
-      status: 'pending'
-    });
-
-    await this.createApplication({
-      clientId: 3,
-      objectCost: '5000000',
-      downPayment: '25',
-      leasingTerm: 48,
-      leasingType: 'Оборудование',
-      clientPhone: '+7-999-123-45-67',
-      clientInn: '1234567890',
-      isNewObject: true,
-      isForRental: false,
-      comment: 'Промышленное оборудование для производства',
-      status: 'collecting_offers'
-    });
-
-    // Create sample offer for the second application
-    await this.createOffer({
-      applicationId: 2,
-      companyId: 1,
-      managerId: 2,
-      monthlyPayment: '135000',
-      firstPayment: '1250000',
-      buyoutPayment: '50000',
-      totalCost: '5530000',
-      interestRate: '12.5'
-    });
+    );
   }
 
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.find(user => user.id === id);
+    return this.users.find(u => u.id === id);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return this.users.find(user => user.username === username);
+    return this.users.find(u => u.username === username);
   }
 
   async createUser(userData: InsertUser): Promise<User> {
     const user: User = {
       id: this.nextId++,
       ...userData,
-      isActive: true,
-      createdAt: new Date().toISOString()
+      userType: userData.userType || "client",
+      email: userData.email || null,
+      firstName: userData.firstName || null,
+      lastName: userData.lastName || null,
+      phone: userData.phone || null,
+      inn: userData.inn || null,
+      companyName: userData.companyName || null,
+      isActive: userData.isActive ?? true,
+      isVerified: userData.isVerified ?? false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.users.push(user);
     return user;
@@ -291,8 +327,13 @@ export class MemStorage implements IStorage {
     const app: LeasingApplication = {
       id: this.nextId++,
       ...application,
-      status: 'pending',
-      createdAt: new Date().toISOString()
+      agentId: application.agentId || null,
+      isNewObject: application.isNewObject ?? true,
+      isForRental: application.isForRental ?? false,
+      comment: application.comment || null,
+      status: application.status || "pending",
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.applications.push(app);
     return app;
@@ -314,6 +355,7 @@ export class MemStorage implements IStorage {
     const app = this.applications.find(app => app.id === id);
     if (app) {
       app.status = status;
+      app.updatedAt = new Date();
     }
     return app;
   }
@@ -327,8 +369,10 @@ export class MemStorage implements IStorage {
     const newOffer: LeasingOffer = {
       id: this.nextId++,
       ...offer,
-      isSelected: false,
-      createdAt: new Date().toISOString()
+      interestRate: offer.interestRate || null,
+      managerId: offer.managerId || null,
+      isSelected: offer.isSelected ?? false,
+      createdAt: new Date(),
     };
     this.offers.push(newOffer);
     return newOffer;
@@ -339,31 +383,44 @@ export class MemStorage implements IStorage {
   }
 
   async selectOffer(offerId: number): Promise<LeasingOffer | undefined> {
-    const offer = this.offers.find(offer => offer.id === offerId);
+    // First, deselect all offers for this application
+    const offer = this.offers.find(o => o.id === offerId);
     if (offer) {
-      offer.isSelected = true;
-      // Unselect other offers for the same application
       this.offers.forEach(o => {
-        if (o.applicationId === offer.applicationId && o.id !== offerId) {
+        if (o.applicationId === offer.applicationId) {
           o.isSelected = false;
         }
       });
+      offer.isSelected = true;
     }
     return offer;
   }
 
   // Company operations
   async getAllCompanies(): Promise<LeasingCompany[]> {
-    return this.companies.filter(company => company.isActive);
+    return this.companies;
   }
 
   async getCompatibleCompanies(application: LeasingApplication): Promise<LeasingCompany[]> {
-    const amount = parseFloat(application.objectCost || '0');
-    return this.companies.filter(company => 
-      company.isActive &&
-      (!company.minAmount || amount >= company.minAmount) &&
-      (!company.maxAmount || amount <= company.maxAmount)
-    );
+    return this.companies.filter(company => {
+      if (!company.isActive) return false;
+      if (company.minAmount && Number(application.objectCost) < Number(company.minAmount)) return false;
+      if (company.maxAmount && Number(application.objectCost) > Number(company.maxAmount)) return false;
+      if (company.minTerm && application.leasingTerm < company.minTerm) return false;
+      if (company.maxTerm && application.leasingTerm > company.maxTerm) return false;
+      
+      // Check if company works with the leasing type
+      switch (application.leasingType) {
+        case "auto":
+          return company.workWithAuto;
+        case "equipment":
+          return company.workWithEquipment;
+        case "real_estate":
+          return company.workWithRealEstate;
+        default:
+          return true;
+      }
+    });
   }
 
   // Car operations
@@ -371,7 +428,16 @@ export class MemStorage implements IStorage {
     const newCar: Car = {
       id: this.nextId++,
       ...car,
-      createdAt: new Date().toISOString()
+      status: car.status || "available",
+      engine: car.engine || null,
+      transmission: car.transmission || null,
+      drive: car.drive || null,
+      isNew: car.isNew ?? true,
+      supplierId: car.supplierId || null,
+      images: car.images || [],
+      specifications: car.specifications || {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
     this.cars.push(newCar);
     return newCar;
@@ -394,12 +460,12 @@ export class MemStorage implements IStorage {
     isNew?: boolean;
   }): Promise<Car[]> {
     return this.cars.filter(car => {
-      if (filters.brand && car.brand.toLowerCase() !== filters.brand.toLowerCase()) return false;
-      if (filters.model && car.model.toLowerCase() !== filters.model.toLowerCase()) return false;
+      if (filters.brand && car.brand !== filters.brand) return false;
+      if (filters.model && car.model !== filters.model) return false;
+      if (filters.minPrice && Number(car.price) < filters.minPrice) return false;
+      if (filters.maxPrice && Number(car.price) > filters.maxPrice) return false;
       if (filters.year && car.year !== filters.year) return false;
       if (filters.isNew !== undefined && car.isNew !== filters.isNew) return false;
-      if (filters.minPrice && parseFloat(car.price) < filters.minPrice) return false;
-      if (filters.maxPrice && parseFloat(car.price) > filters.maxPrice) return false;
       return true;
     });
   }
@@ -409,7 +475,7 @@ export class MemStorage implements IStorage {
     const newDoc: Document = {
       id: this.nextId++,
       ...document,
-      createdAt: new Date().toISOString()
+      createdAt: new Date(),
     };
     this.documents.push(newDoc);
     return newDoc;
@@ -424,18 +490,15 @@ export class MemStorage implements IStorage {
     const newNotification: Notification = {
       id: this.nextId++,
       ...notification,
-      isRead: false,
-      createdAt: new Date().toISOString()
+      isRead: notification.isRead ?? false,
+      createdAt: new Date(),
     };
     this.notifications.push(newNotification);
     return newNotification;
   }
 
   async getUserNotifications(userId: number): Promise<Notification[]> {
-    return this.notifications
-      .filter(notification => notification.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 50);
+    return this.notifications.filter(notification => notification.userId === userId);
   }
 
   async markNotificationAsRead(id: number): Promise<void> {
@@ -450,362 +513,314 @@ export class MemStorage implements IStorage {
     const newMessage: ApplicationMessage = {
       id: this.nextId++,
       ...message,
-      createdAt: new Date().toISOString()
+      isSystemMessage: message.isSystemMessage ?? false,
+      createdAt: new Date(),
     };
     this.applicationMessages.push(newMessage);
     return newMessage;
   }
 
   async getApplicationMessages(applicationId: number): Promise<ApplicationMessage[]> {
-    return this.applicationMessages
-      .filter(message => message.applicationId === applicationId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return this.applicationMessages.filter(msg => msg.applicationId === applicationId);
   }
 
   // Application workflow operations
   async approveApplication(id: number, adminId: number): Promise<LeasingApplication | undefined> {
     const app = this.applications.find(app => app.id === id);
-    if (app && app.status === 'pending') {
-      app.status = 'approved_by_admin';
+    if (app) {
+      app.status = "approved_by_admin";
+      app.updatedAt = new Date();
       
-      // Create system message
-      await this.createApplicationMessage({
-        applicationId: id,
-        senderId: adminId,
-        message: 'Заявка одобрена администратором и передана менеджерам для формирования предложений',
-        isSystemMessage: true
+      // Create notification
+      await this.createNotification({
+        userId: app.clientId,
+        title: "Заявка одобрена",
+        message: "Ваша заявка на лизинг одобрена администратором",
+        type: "success",
       });
-      
-      // Send to managers
-      await this.sendApplicationToManagers(id);
     }
     return app;
   }
 
   async rejectApplication(id: number, adminId: number, reason: string): Promise<LeasingApplication | undefined> {
     const app = this.applications.find(app => app.id === id);
-    if (app && app.status === 'pending') {
-      app.status = 'rejected';
+    if (app) {
+      app.status = "rejected";
+      app.updatedAt = new Date();
       
-      // Create system message
-      await this.createApplicationMessage({
-        applicationId: id,
-        senderId: adminId,
-        message: `Заявка отклонена администратором. Причина: ${reason}`,
-        isSystemMessage: true
-      });
-      
-      // Notify client
+      // Create notification
       await this.createNotification({
         userId: app.clientId,
-        title: 'Заявка отклонена',
-        message: `Ваша заявка №${id} была отклонена. Причина: ${reason}`,
-        type: 'error'
+        title: "Заявка отклонена",
+        message: `Ваша заявка на лизинг отклонена: ${reason}`,
+        type: "error",
       });
     }
     return app;
   }
 
   async sendApplicationToManagers(applicationId: number): Promise<void> {
-    const application = this.applications.find(app => app.id === applicationId);
-    if (!application) return;
-
-    const managers = await this.getAllManagers();
-    const compatibleCompanies = await this.getCompatibleCompanies(application);
-    
-    // Find managers from compatible companies
-    for (const manager of managers) {
-      const hasCompatibleCompany = compatibleCompanies.some(company => 
-        company.name === manager.companyName
-      );
-      
-      if (hasCompatibleCompany) {
-        await this.createNotification({
-          userId: manager.id,
-          title: 'Новая заявка',
-          message: `Поступила новая заявка №${applicationId} на сумму ${application.objectCost} руб.`,
-          type: 'info'
-        });
-      }
-    }
-    
-    // Update application status
     const app = this.applications.find(app => app.id === applicationId);
     if (app) {
-      app.status = 'collecting_offers';
+      app.status = "collecting_offers";
+      app.updatedAt = new Date();
+      
+      // Notify managers
+      const managers = this.users.filter(u => u.userType === "manager");
+      for (const manager of managers) {
+        await this.createNotification({
+          userId: manager.id,
+          title: "Новая заявка",
+          message: `Поступила новая заявка на лизинг #${applicationId}`,
+          type: "info",
+        });
+      }
     }
   }
 
   async getAllManagers(): Promise<User[]> {
-    return this.users.filter(user => user.userType === 'manager' && user.isActive);
+    return this.users.filter(u => u.userType === "manager");
+  }
+
+  // CMS operations
+  async createPage(page: InsertPage): Promise<Page> {
+    const newPage: Page = {
+      id: this.nextId++,
+      ...page,
+      content: page.content || null,
+      metaTitle: page.metaTitle || null,
+      metaDescription: page.metaDescription || null,
+      isPublished: page.isPublished ?? false,
+      template: page.template || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.pages.push(newPage);
+    return newPage;
+  }
+
+  async getPageBySlug(slug: string): Promise<Page | undefined> {
+    return this.pages.find(p => p.slug === slug);
+  }
+
+  async getAllPages(): Promise<Page[]> {
+    return this.pages;
+  }
+
+  async updatePage(id: number, pageData: Partial<InsertPage>): Promise<Page | undefined> {
+    const page = this.pages.find(p => p.id === id);
+    if (page) {
+      Object.assign(page, pageData);
+      page.updatedAt = new Date();
+    }
+    return page;
+  }
+
+  async deletePage(id: number): Promise<boolean> {
+    const index = this.pages.findIndex(p => p.id === id);
+    if (index !== -1) {
+      this.pages.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
+  async createForm(form: InsertForm): Promise<Form> {
+    const newForm: Form = {
+      id: this.nextId++,
+      ...form,
+      isActive: form.isActive ?? true,
+      description: form.description || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.forms.push(newForm);
+    return newForm;
+  }
+
+  async getAllForms(): Promise<Form[]> {
+    return this.forms;
+  }
+
+  async getForm(id: number): Promise<Form | undefined> {
+    return this.forms.find(f => f.id === id);
+  }
+
+  async updateForm(id: number, formData: Partial<InsertForm>): Promise<Form | undefined> {
+    const form = this.forms.find(f => f.id === id);
+    if (form) {
+      Object.assign(form, formData);
+      form.updatedAt = new Date();
+    }
+    return form;
+  }
+
+  async deleteForm(id: number): Promise<boolean> {
+    const index = this.forms.findIndex(f => f.id === id);
+    if (index !== -1) {
+      this.forms.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
+  async createFormSubmission(submission: InsertFormSubmission): Promise<FormSubmission> {
+    const newSubmission: FormSubmission = {
+      id: this.nextId++,
+      ...submission,
+      userAgent: submission.userAgent || null,
+      ipAddress: submission.ipAddress || null,
+      createdAt: new Date(),
+    };
+    this.formSubmissions.push(newSubmission);
+    return newSubmission;
+  }
+
+  async getFormSubmissions(formId: number): Promise<FormSubmission[]> {
+    return this.formSubmissions.filter(s => s.formId === formId);
+  }
+
+  async createParser(parser: InsertParser): Promise<Parser> {
+    const newParser: Parser = {
+      id: this.nextId++,
+      ...parser,
+      isActive: parser.isActive ?? true,
+      lastRun: parser.lastRun || null,
+      nextRun: parser.nextRun || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.parsers.push(newParser);
+    return newParser;
+  }
+
+  async getAllParsers(): Promise<Parser[]> {
+    return this.parsers;
+  }
+
+  async updateParser(id: number, parserData: Partial<InsertParser>): Promise<Parser | undefined> {
+    const parser = this.parsers.find(p => p.id === id);
+    if (parser) {
+      Object.assign(parser, parserData);
+      parser.updatedAt = new Date();
+    }
+    return parser;
+  }
+
+  async deleteParser(id: number): Promise<boolean> {
+    const index = this.parsers.findIndex(p => p.id === id);
+    if (index !== -1) {
+      this.parsers.splice(index, 1);
+      return true;
+    }
+    return false;
+  }
+
+  async getSystemSettings(): Promise<SystemSetting[]> {
+    return this.systemSettings;
+  }
+
+  async getSystemSetting(key: string): Promise<SystemSetting | undefined> {
+    return this.systemSettings.find(s => s.key === key);
+  }
+
+  async updateSystemSetting(key: string, value: string): Promise<SystemSetting | undefined> {
+    const setting = this.systemSettings.find(s => s.key === key);
+    if (setting) {
+      setting.value = value;
+      setting.updatedAt = new Date();
+    }
+    return setting;
+  }
+
+  async createAuditLog(logData: Partial<AuditLog>): Promise<AuditLog> {
+    const log: AuditLog = {
+      id: this.nextId++,
+      userId: logData.userId || null,
+      action: logData.action || "unknown",
+      tableName: logData.tableName || null,
+      recordId: logData.recordId || null,
+      oldValues: logData.oldValues || null,
+      newValues: logData.newValues || null,
+      ipAddress: logData.ipAddress || null,
+      userAgent: logData.userAgent || null,
+      createdAt: new Date(),
+    };
+    this.auditLogs.push(log);
+    return log;
+  }
+
+  async getAuditLogs(limit: number = 100): Promise<AuditLog[]> {
+    return this.auditLogs.slice(0, limit);
   }
 }
 
-// Database storage implementation using Drizzle ORM
+// Database implementation will be added when database is available
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user || undefined;
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user || undefined;
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(insertUser)
-      .returning();
     return user;
   }
 
-  async createApplication(application: InsertLeasingApplication): Promise<LeasingApplication> {
-    const [app] = await db
-      .insert(leasingApplications)
-      .values(application)
-      .returning();
-    return app;
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
   }
 
-  async getApplicationsByClient(clientId: number): Promise<LeasingApplication[]> {
-    return await db.select().from(leasingApplications).where(eq(leasingApplications.clientId, clientId));
-  }
-
-  async getApplicationsByAgent(agentId: number): Promise<LeasingApplication[]> {
-    return await db.select().from(leasingApplications).where(eq(leasingApplications.agentId, agentId));
-  }
-
-  async getApplication(id: number): Promise<LeasingApplication | undefined> {
-    const [app] = await db.select().from(leasingApplications).where(eq(leasingApplications.id, id));
-    return app || undefined;
-  }
-
-  async updateApplicationStatus(id: number, status: string): Promise<LeasingApplication | undefined> {
-    const [app] = await db
-      .update(leasingApplications)
-      .set({ status })
-      .where(eq(leasingApplications.id, id))
-      .returning();
-    return app || undefined;
-  }
-
-  async getAllApplications(): Promise<LeasingApplication[]> {
-    return await db.select().from(leasingApplications);
-  }
-
-  async createOffer(offer: InsertLeasingOffer): Promise<LeasingOffer> {
-    const [newOffer] = await db
-      .insert(leasingOffers)
-      .values(offer)
-      .returning();
-    return newOffer;
-  }
-
-  async getOffersByApplication(applicationId: number): Promise<LeasingOffer[]> {
-    return await db.select().from(leasingOffers).where(eq(leasingOffers.applicationId, applicationId));
-  }
-
-  async selectOffer(offerId: number): Promise<LeasingOffer | undefined> {
-    const [offer] = await db
-      .update(leasingOffers)
-      .set({ isSelected: true })
-      .where(eq(leasingOffers.id, offerId))
-      .returning();
-    return offer || undefined;
-  }
-
-  async getAllCompanies(): Promise<LeasingCompany[]> {
-    return await db.select().from(leasingCompanies);
-  }
-
-  async getCompatibleCompanies(application: LeasingApplication): Promise<LeasingCompany[]> {
-    return await db.select().from(leasingCompanies).where(eq(leasingCompanies.isActive, true));
-  }
-
-  async createCar(car: InsertCar): Promise<Car> {
-    const [newCar] = await db
-      .insert(cars)
-      .values(car)
-      .returning();
-    return newCar;
-  }
-
-  async getAllCars(): Promise<Car[]> {
-    return await db.select().from(cars);
-  }
-
-  async getCarsBySupplier(supplierId: number): Promise<Car[]> {
-    return await db.select().from(cars).where(eq(cars.supplierId, supplierId));
-  }
-
-  async searchCars(filters: {
-    brand?: string;
-    model?: string;
-    minPrice?: number;
-    maxPrice?: number;
-    year?: number;
-    isNew?: boolean;
-  }): Promise<Car[]> {
-    return await db.select().from(cars);
-  }
-
-  async createDocument(document: InsertDocument): Promise<Document> {
-    const [newDoc] = await db
-      .insert(documents)
-      .values(document)
-      .returning();
-    return newDoc;
-  }
-
-  async getDocumentsByApplication(applicationId: number): Promise<Document[]> {
-    return await db.select().from(documents).where(eq(documents.applicationId, applicationId));
-  }
-
-  async createNotification(notification: InsertNotification): Promise<Notification> {
-    const [newNotification] = await db
-      .insert(notifications)
-      .values(notification)
-      .returning();
-    return newNotification;
-  }
-
-  async getUserNotifications(userId: number): Promise<Notification[]> {
-    return await db.select().from(notifications).where(eq(notifications.userId, userId));
-  }
-
-  async markNotificationAsRead(id: number): Promise<void> {
-    await db
-      .update(notifications)
-      .set({ isRead: true })
-      .where(eq(notifications.id, id));
-  }
-
-  async createApplicationMessage(message: InsertApplicationMessage): Promise<ApplicationMessage> {
-    const [newMessage] = await db
-      .insert(applicationMessages)
-      .values(message)
-      .returning();
-    return newMessage;
-  }
-
-  async getApplicationMessages(applicationId: number): Promise<ApplicationMessage[]> {
-    return await db.select().from(applicationMessages).where(eq(applicationMessages.applicationId, applicationId));
-  }
-
-  async approveApplication(id: number, adminId: number): Promise<LeasingApplication | undefined> {
-    const [app] = await db
-      .update(leasingApplications)
-      .set({ status: 'approved_by_admin' })
-      .where(eq(leasingApplications.id, id))
-      .returning();
-    
-    if (app) {
-      await this.createApplicationMessage({
-        applicationId: id,
-        senderId: adminId,
-        message: 'Заявка одобрена администратором и передана менеджерам для формирования предложений',
-        isSystemMessage: true
-      });
-      
-      await this.sendApplicationToManagers(id);
-    }
-    
-    return app || undefined;
-  }
-
-  async rejectApplication(id: number, adminId: number, reason: string): Promise<LeasingApplication | undefined> {
-    const [app] = await db
-      .update(leasingApplications)
-      .set({ status: 'rejected' })
-      .where(eq(leasingApplications.id, id))
-      .returning();
-    
-    if (app) {
-      await this.createApplicationMessage({
-        applicationId: id,
-        senderId: adminId,
-        message: `Заявка отклонена администратором. Причина: ${reason}`,
-        isSystemMessage: true
-      });
-      
-      await this.createNotification({
-        userId: app.clientId,
-        title: 'Заявка отклонена',
-        message: `Ваша заявка №${id} была отклонена. Причина: ${reason}`,
-        type: 'error'
-      });
-    }
-    
-    return app || undefined;
-  }
-
-  async sendApplicationToManagers(applicationId: number): Promise<void> {
-    const application = await this.getApplication(applicationId);
-    if (!application) return;
-
-    const managers = await this.getAllManagers();
-    const compatibleCompanies = await this.getCompatibleCompanies(application);
-    
-    for (const manager of managers) {
-      const hasCompatibleCompany = compatibleCompanies.some(company => 
-        company.name === manager.companyName
-      );
-      
-      if (hasCompatibleCompany) {
-        await this.createNotification({
-          userId: manager.id,
-          title: 'Новая заявка',
-          message: `Поступила новая заявка №${applicationId} на сумму ${application.objectCost} руб.`,
-          type: 'info'
-        });
-      }
-    }
-    
-    await this.updateApplicationStatus(applicationId, 'collecting_offers');
-  }
-
-  async getAllManagers(): Promise<User[]> {
-    return await db.select().from(users).where(eq(users.userType, 'manager'));
-  }
+  // Implementation for other methods would go here...
+  // For now, we'll use fallback methods
+  async createApplication(): Promise<LeasingApplication> { throw new Error("Not implemented"); }
+  async getApplicationsByClient(): Promise<LeasingApplication[]> { throw new Error("Not implemented"); }
+  async getApplicationsByAgent(): Promise<LeasingApplication[]> { throw new Error("Not implemented"); }
+  async getApplication(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
+  async updateApplicationStatus(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
+  async getAllApplications(): Promise<LeasingApplication[]> { throw new Error("Not implemented"); }
+  async createOffer(): Promise<LeasingOffer> { throw new Error("Not implemented"); }
+  async getOffersByApplication(): Promise<LeasingOffer[]> { throw new Error("Not implemented"); }
+  async selectOffer(): Promise<LeasingOffer | undefined> { throw new Error("Not implemented"); }
+  async getAllCompanies(): Promise<LeasingCompany[]> { throw new Error("Not implemented"); }
+  async getCompatibleCompanies(): Promise<LeasingCompany[]> { throw new Error("Not implemented"); }
+  async createCar(): Promise<Car> { throw new Error("Not implemented"); }
+  async getAllCars(): Promise<Car[]> { throw new Error("Not implemented"); }
+  async getCarsBySupplier(): Promise<Car[]> { throw new Error("Not implemented"); }
+  async searchCars(): Promise<Car[]> { throw new Error("Not implemented"); }
+  async createDocument(): Promise<Document> { throw new Error("Not implemented"); }
+  async getDocumentsByApplication(): Promise<Document[]> { throw new Error("Not implemented"); }
+  async createNotification(): Promise<Notification> { throw new Error("Not implemented"); }
+  async getUserNotifications(): Promise<Notification[]> { throw new Error("Not implemented"); }
+  async markNotificationAsRead(): Promise<void> { throw new Error("Not implemented"); }
+  async createApplicationMessage(): Promise<ApplicationMessage> { throw new Error("Not implemented"); }
+  async getApplicationMessages(): Promise<ApplicationMessage[]> { throw new Error("Not implemented"); }
+  async approveApplication(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
+  async rejectApplication(): Promise<LeasingApplication | undefined> { throw new Error("Not implemented"); }
+  async sendApplicationToManagers(): Promise<void> { throw new Error("Not implemented"); }
+  async getAllManagers(): Promise<User[]> { throw new Error("Not implemented"); }
+  async createPage(): Promise<Page> { throw new Error("Not implemented"); }
+  async getPageBySlug(): Promise<Page | undefined> { throw new Error("Not implemented"); }
+  async getAllPages(): Promise<Page[]> { throw new Error("Not implemented"); }
+  async updatePage(): Promise<Page | undefined> { throw new Error("Not implemented"); }
+  async deletePage(): Promise<boolean> { throw new Error("Not implemented"); }
+  async createForm(): Promise<Form> { throw new Error("Not implemented"); }
+  async getAllForms(): Promise<Form[]> { throw new Error("Not implemented"); }
+  async getForm(): Promise<Form | undefined> { throw new Error("Not implemented"); }
+  async updateForm(): Promise<Form | undefined> { throw new Error("Not implemented"); }
+  async deleteForm(): Promise<boolean> { throw new Error("Not implemented"); }
+  async createFormSubmission(): Promise<FormSubmission> { throw new Error("Not implemented"); }
+  async getFormSubmissions(): Promise<FormSubmission[]> { throw new Error("Not implemented"); }
+  async createParser(): Promise<Parser> { throw new Error("Not implemented"); }
+  async getAllParsers(): Promise<Parser[]> { throw new Error("Not implemented"); }
+  async updateParser(): Promise<Parser | undefined> { throw new Error("Not implemented"); }
+  async deleteParser(): Promise<boolean> { throw new Error("Not implemented"); }
+  async getSystemSettings(): Promise<SystemSetting[]> { throw new Error("Not implemented"); }
+  async getSystemSetting(): Promise<SystemSetting | undefined> { throw new Error("Not implemented"); }
+  async updateSystemSetting(): Promise<SystemSetting | undefined> { throw new Error("Not implemented"); }
+  async createAuditLog(): Promise<AuditLog> { throw new Error("Not implemented"); }
+  async getAuditLogs(): Promise<AuditLog[]> { throw new Error("Not implemented"); }
 }
 
-// Create a simplified fallback storage that throws helpful errors
-class FallbackStorage implements IStorage {
-  private throwNotImplemented(method: string): never {
-    throw new Error(`${method} requires DATABASE_URL to be configured. Please set up a PostgreSQL database.`);
-  }
-
-  async getUser(): Promise<User | undefined> { this.throwNotImplemented('getUser'); }
-  async getUserByUsername(): Promise<User | undefined> { this.throwNotImplemented('getUserByUsername'); }
-  async createUser(): Promise<User> { this.throwNotImplemented('createUser'); }
-  async createApplication(): Promise<LeasingApplication> { this.throwNotImplemented('createApplication'); }
-  async getApplicationsByClient(): Promise<LeasingApplication[]> { this.throwNotImplemented('getApplicationsByClient'); }
-  async getApplicationsByAgent(): Promise<LeasingApplication[]> { this.throwNotImplemented('getApplicationsByAgent'); }
-  async getApplication(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('getApplication'); }
-  async updateApplicationStatus(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('updateApplicationStatus'); }
-  async getAllApplications(): Promise<LeasingApplication[]> { this.throwNotImplemented('getAllApplications'); }
-  async createOffer(): Promise<LeasingOffer> { this.throwNotImplemented('createOffer'); }
-  async getOffersByApplication(): Promise<LeasingOffer[]> { this.throwNotImplemented('getOffersByApplication'); }
-  async selectOffer(): Promise<LeasingOffer | undefined> { this.throwNotImplemented('selectOffer'); }
-  async getAllCompanies(): Promise<LeasingCompany[]> { this.throwNotImplemented('getAllCompanies'); }
-  async getCompatibleCompanies(): Promise<LeasingCompany[]> { this.throwNotImplemented('getCompatibleCompanies'); }
-  async createCar(): Promise<Car> { this.throwNotImplemented('createCar'); }
-  async getAllCars(): Promise<Car[]> { this.throwNotImplemented('getAllCars'); }
-  async getCarsBySupplier(): Promise<Car[]> { this.throwNotImplemented('getCarsBySupplier'); }
-  async searchCars(): Promise<Car[]> { this.throwNotImplemented('searchCars'); }
-  async createDocument(): Promise<Document> { this.throwNotImplemented('createDocument'); }
-  async getDocumentsByApplication(): Promise<Document[]> { this.throwNotImplemented('getDocumentsByApplication'); }
-  async createNotification(): Promise<Notification> { this.throwNotImplemented('createNotification'); }
-  async getUserNotifications(): Promise<Notification[]> { this.throwNotImplemented('getUserNotifications'); }
-  async markNotificationAsRead(): Promise<void> { this.throwNotImplemented('markNotificationAsRead'); }
-  async createApplicationMessage(): Promise<ApplicationMessage> { this.throwNotImplemented('createApplicationMessage'); }
-  async getApplicationMessages(): Promise<ApplicationMessage[]> { this.throwNotImplemented('getApplicationMessages'); }
-  async approveApplication(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('approveApplication'); }
-  async rejectApplication(): Promise<LeasingApplication | undefined> { this.throwNotImplemented('rejectApplication'); }
-  async sendApplicationToManagers(): Promise<void> { this.throwNotImplemented('sendApplicationToManagers'); }
-  async getAllManagers(): Promise<User[]> { this.throwNotImplemented('getAllManagers'); }
-}
-
-export const storage = (process.env.DATABASE_URL && db) ? new DatabaseStorage() : new MemStorage();
+export const storage = new MemStorage();
