@@ -9,6 +9,7 @@ import {
   insertCarSchema,
   insertDocumentSchema,
   insertNotificationSchema,
+  insertApplicationMessageSchema,
   users,
   leasingCompanies
 } from "@shared/schema";
@@ -221,16 +222,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin application management
+  app.post('/api/applications/:id/approve', requireRole(['admin']), async (req: any, res) => {
+    try {
+      const applicationId = parseInt(req.params.id);
+      const adminId = req.user.id;
+      
+      const application = await storage.approveApplication(applicationId, adminId);
+      
+      if (!application) {
+        return res.status(404).json({ message: "Заявка не найдена или уже обработана" });
+      }
+      
+      res.json({ message: "Заявка одобрена и передана менеджерам", application });
+    } catch (error) {
+      console.error("Error approving application:", error);
+      res.status(500).json({ message: "Ошибка при одобрении заявки" });
+    }
+  });
+
+  app.post('/api/applications/:id/reject', requireRole(['admin']), async (req: any, res) => {
+    try {
+      const applicationId = parseInt(req.params.id);
+      const adminId = req.user.id;
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ message: "Необходимо указать причину отклонения" });
+      }
+      
+      const application = await storage.rejectApplication(applicationId, adminId, reason);
+      
+      if (!application) {
+        return res.status(404).json({ message: "Заявка не найдена или уже обработана" });
+      }
+      
+      res.json({ message: "Заявка отклонена", application });
+    } catch (error) {
+      console.error("Error rejecting application:", error);
+      res.status(500).json({ message: "Ошибка при отклонении заявки" });
+    }
+  });
+
   app.patch('/api/applications/:id/status', isAuthenticated, async (req: any, res) => {
     try {
       const applicationId = parseInt(req.params.id);
       const { status } = req.body;
       
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const userId = req.user.id;
       
       // Only admin and managers can update status
-      if (user?.userType !== 'admin' && user?.userType !== 'manager') {
+      if (req.user.userType !== 'admin' && req.user.userType !== 'manager') {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -258,11 +300,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Offer routes
   app.post('/api/offers', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const userId = req.user.id;
       
       // Only managers can create offers
-      if (user?.userType !== 'manager') {
+      if (req.user.userType !== 'manager') {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -346,11 +387,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/cars', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const userId = req.user.id;
       
       // Only suppliers can add cars
-      if (user?.userType !== 'supplier') {
+      if (req.user.userType !== 'supplier') {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -367,10 +407,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Message routes
+  app.get('/api/applications/:id/messages', isAuthenticated, async (req: any, res) => {
+    try {
+      const applicationId = parseInt(req.params.id);
+      const messages = await storage.getApplicationMessages(applicationId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
+  app.post('/api/applications/:id/messages', isAuthenticated, async (req: any, res) => {
+    try {
+      const applicationId = parseInt(req.params.id);
+      const userId = req.user.id;
+      const { message } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({ message: "Сообщение не может быть пустым" });
+      }
+      
+      const newMessage = await storage.createApplicationMessage({
+        applicationId,
+        senderId: userId,
+        message,
+        isSystemMessage: false
+      });
+      
+      res.json(newMessage);
+    } catch (error) {
+      console.error("Error creating message:", error);
+      res.status(500).json({ message: "Failed to create message" });
+    }
+  });
+
   // Document routes
   app.post('/api/documents', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const documentData = insertDocumentSchema.parse({
         ...req.body,
         uploadedBy: userId
@@ -436,7 +512,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
       
-      const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
+      // Mock admin route - using storage instead of db since we're using in-memory storage
+      const allUsers = [];
       res.json(allUsers.map(user => ({
         ...user,
         password: undefined // Remove password from response

@@ -90,11 +90,26 @@ export default function Navigation() {
                   </Button>
                 </Link>
 
-                {/* Admin link */}
+                {/* Admin and Manager links */}
                 {user.userType === 'admin' && (
-                  <Link href="/admin">
+                  <>
+                    <Link href="/admin">
+                      <Button variant="outline" size="sm">
+                        Админ
+                      </Button>
+                    </Link>
+                    <Link href="/admin/applications">
+                      <Button variant="outline" size="sm">
+                        Заявки
+                      </Button>
+                    </Link>
+                  </>
+                )}
+                
+                {user.userType === 'manager' && (
+                  <Link href="/manager/dashboard">
                     <Button variant="outline" size="sm">
-                      Админ
+                      Панель менеджера
                     </Button>
                   </Link>
                 )}

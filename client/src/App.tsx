@@ -10,6 +10,9 @@ import Dashboard from "@/pages/dashboard";
 import Admin from "@/pages/admin";
 import AdminDatabase from "@/pages/admin-database";
 import AdminParser from "@/pages/admin-parser";
+import AdminApplications from "@/pages/admin-applications";
+import ApplicationDetail from "@/pages/application-detail";
+import ManagerDashboard from "@/pages/manager-dashboard";
 import ApplicationForm from "@/pages/application-form";
 import Catalog from "@/pages/catalog";
 import Login from "@/pages/login";
@@ -34,6 +37,9 @@ function Router() {
           <Route path="/admin" component={Admin} />
           <Route path="/admin/database" component={AdminDatabase} />
           <Route path="/admin/parser" component={AdminParser} />
+          <Route path="/admin/applications" component={AdminApplications} />
+          <Route path="/manager/dashboard" component={ManagerDashboard} />
+          <Route path="/application/:id" component={ApplicationDetail} />
           <Route path="/catalog" component={Catalog} />
           <Route path="/application" component={ApplicationForm} />
         </>

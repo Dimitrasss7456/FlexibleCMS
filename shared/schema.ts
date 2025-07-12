@@ -57,26 +57,9 @@ export const leasingApplications = pgTable("leasing_applications", {
   isNewObject: boolean("is_new_object").default(true),
   isForRental: boolean("is_for_rental").default(false),
   comment: text("comment"),
-  status: varchar("status").notNull().default("collecting_offers"), // collecting_offers, reviewing_offers, collecting_documents, document_review, approved, rejected, issued
+  status: varchar("status").notNull().default("pending"), // pending, approved_by_admin, collecting_offers, reviewing_offers, collecting_documents, approved, needs_revision, issued, rejected
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const leasingCompanies = pgTable("leasing_companies", {
-  id: serial("id").primaryKey(),
-  name: varchar("name").notNull(),
-  description: text("description"),
-  logo: varchar("logo"),
-  isActive: boolean("is_active").default(true),
-  minAmount: decimal("min_amount", { precision: 15, scale: 2 }),
-  maxAmount: decimal("max_amount", { precision: 15, scale: 2 }),
-  minTerm: integer("min_term"), // months
-  maxTerm: integer("max_term"), // months
-  workWithUsed: boolean("work_with_used").default(true),
-  workWithAuto: boolean("work_with_auto").default(true),
-  workWithEquipment: boolean("work_with_equipment").default(true),
-  workWithRealEstate: boolean("work_with_real_estate").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const leasingOffers = pgTable("leasing_offers", {
@@ -131,6 +114,35 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const applicationMessages = pgTable("application_messages", {
+  id: serial("id").primaryKey(),
+  applicationId: integer("application_id").references(() => leasingApplications.id).notNull(),
+  senderId: integer("sender_id").references(() => users.id).notNull(),
+  message: text("message").notNull(),
+  isSystemMessage: boolean("is_system_message").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const leasingCompanies = pgTable("leasing_companies", {
+  id: serial("id").primaryKey(),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  logo: varchar("logo"),
+  isActive: boolean("is_active").default(true),
+  minAmount: decimal("min_amount", { precision: 15, scale: 2 }),
+  maxAmount: decimal("max_amount", { precision: 15, scale: 2 }),
+  minTerm: integer("min_term"), // months
+  maxTerm: integer("max_term"), // months
+  interestRate: decimal("interest_rate", { precision: 5, scale: 2 }),
+  maxLeasingTerm: integer("max_leasing_term"),
+  requirements: jsonb("requirements"),
+  workWithUsed: boolean("work_with_used").default(true),
+  workWithAuto: boolean("work_with_auto").default(true),
+  workWithEquipment: boolean("work_with_equipment").default(true),
+  workWithRealEstate: boolean("work_with_real_estate").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   applications: many(leasingApplications, { relationName: "client_applications" }),
@@ -139,6 +151,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   cars: many(cars),
   documents: many(documents),
   notifications: many(notifications),
+  sentMessages: many(applicationMessages),
 }));
 
 export const leasingApplicationsRelations = relations(leasingApplications, ({ one, many }) => ({
@@ -154,6 +167,7 @@ export const leasingApplicationsRelations = relations(leasingApplications, ({ on
   }),
   offers: many(leasingOffers),
   documents: many(documents),
+  messages: many(applicationMessages),
 }));
 
 export const leasingOffersRelations = relations(leasingOffers, ({ one }) => ({
@@ -196,6 +210,17 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   }),
 }));
 
+export const applicationMessagesRelations = relations(applicationMessages, ({ one }) => ({
+  application: one(leasingApplications, {
+    fields: [applicationMessages.applicationId],
+    references: [leasingApplications.id],
+  }),
+  sender: one(users, {
+    fields: [applicationMessages.senderId],
+    references: [users.id],
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -226,6 +251,11 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
 });
 
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertApplicationMessageSchema = createInsertSchema(applicationMessages).omit({
   id: true,
   createdAt: true,
 });
@@ -261,4 +291,6 @@ export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 export type Document = typeof documents.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+export type InsertApplicationMessage = z.infer<typeof insertApplicationMessageSchema>;
+export type ApplicationMessage = typeof applicationMessages.$inferSelect;
 export type LeasingCompany = typeof leasingCompanies.$inferSelect;

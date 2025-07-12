@@ -11,6 +11,8 @@ import {
   type Document,
   type InsertNotification,
   type Notification,
+  type InsertApplicationMessage,
+  type ApplicationMessage,
   type LeasingCompany,
 } from "@shared/schema";
 
@@ -58,6 +60,16 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   getUserNotifications(userId: number): Promise<Notification[]>;
   markNotificationAsRead(id: number): Promise<void>;
+  
+  // Message operations
+  createApplicationMessage(message: InsertApplicationMessage): Promise<ApplicationMessage>;
+  getApplicationMessages(applicationId: number): Promise<ApplicationMessage[]>;
+  
+  // Application workflow operations
+  approveApplication(id: number, adminId: number): Promise<LeasingApplication | undefined>;
+  rejectApplication(id: number, adminId: number, reason: string): Promise<LeasingApplication | undefined>;
+  sendApplicationToManagers(applicationId: number): Promise<void>;
+  getAllManagers(): Promise<User[]>;
 }
 
 // In-memory storage implementation for development
@@ -69,6 +81,7 @@ export class MemStorage implements IStorage {
   private cars: Car[] = [];
   private documents: Document[] = [];
   private notifications: Notification[] = [];
+  private applicationMessages: ApplicationMessage[] = [];
   private nextId = 1;
 
   constructor() {
@@ -153,6 +166,84 @@ export class MemStorage implements IStorage {
         createdAt: new Date().toISOString()
       }
     ];
+    
+    // Initialize demo data
+    this.initializeDemoData();
+  }
+
+  private async initializeDemoData() {
+    // Create demo users with different roles
+    await this.createUser({
+      username: 'admin',
+      password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkhOtEDO4LgB2QK', // password: admin123
+      email: 'admin@example.com',
+      firstName: 'Администратор',
+      lastName: 'Системы',
+      userType: 'admin',
+      isActive: true
+    });
+
+    await this.createUser({
+      username: 'manager1',
+      password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkhOtEDO4LgB2QK', // password: admin123
+      email: 'manager1@example.com',
+      firstName: 'Менеджер',
+      lastName: 'Иван',
+      userType: 'manager',
+      companyName: 'AutoLeasing Pro',
+      isActive: true
+    });
+
+    await this.createUser({
+      username: 'client1',
+      password: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkhOtEDO4LgB2QK', // password: admin123
+      email: 'client1@example.com',
+      firstName: 'Клиент',
+      lastName: 'Петр',
+      userType: 'client',
+      isActive: true
+    });
+
+    // Create sample applications
+    await this.createApplication({
+      clientId: 3,
+      objectCost: '2500000',
+      downPayment: '30',
+      leasingTerm: 36,
+      leasingType: 'Автомобиль',
+      clientPhone: '+7-999-123-45-67',
+      clientInn: '1234567890',
+      isNewObject: true,
+      isForRental: false,
+      comment: 'Необходим автомобиль для работы',
+      status: 'pending'
+    });
+
+    await this.createApplication({
+      clientId: 3,
+      objectCost: '5000000',
+      downPayment: '25',
+      leasingTerm: 48,
+      leasingType: 'Оборудование',
+      clientPhone: '+7-999-123-45-67',
+      clientInn: '1234567890',
+      isNewObject: true,
+      isForRental: false,
+      comment: 'Промышленное оборудование для производства',
+      status: 'collecting_offers'
+    });
+
+    // Create sample offer for the second application
+    await this.createOffer({
+      applicationId: 2,
+      companyId: 1,
+      managerId: 2,
+      monthlyPayment: '135000',
+      firstPayment: '1250000',
+      buyoutPayment: '50000',
+      totalCost: '5530000',
+      interestRate: '12.5'
+    });
   }
 
   // User operations
@@ -332,6 +423,101 @@ export class MemStorage implements IStorage {
     if (notification) {
       notification.isRead = true;
     }
+  }
+
+  // Message operations
+  async createApplicationMessage(message: InsertApplicationMessage): Promise<ApplicationMessage> {
+    const newMessage: ApplicationMessage = {
+      id: this.nextId++,
+      ...message,
+      createdAt: new Date().toISOString()
+    };
+    this.applicationMessages.push(newMessage);
+    return newMessage;
+  }
+
+  async getApplicationMessages(applicationId: number): Promise<ApplicationMessage[]> {
+    return this.applicationMessages
+      .filter(message => message.applicationId === applicationId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }
+
+  // Application workflow operations
+  async approveApplication(id: number, adminId: number): Promise<LeasingApplication | undefined> {
+    const app = this.applications.find(app => app.id === id);
+    if (app && app.status === 'pending') {
+      app.status = 'approved_by_admin';
+      
+      // Create system message
+      await this.createApplicationMessage({
+        applicationId: id,
+        senderId: adminId,
+        message: 'Заявка одобрена администратором и передана менеджерам для формирования предложений',
+        isSystemMessage: true
+      });
+      
+      // Send to managers
+      await this.sendApplicationToManagers(id);
+    }
+    return app;
+  }
+
+  async rejectApplication(id: number, adminId: number, reason: string): Promise<LeasingApplication | undefined> {
+    const app = this.applications.find(app => app.id === id);
+    if (app && app.status === 'pending') {
+      app.status = 'rejected';
+      
+      // Create system message
+      await this.createApplicationMessage({
+        applicationId: id,
+        senderId: adminId,
+        message: `Заявка отклонена администратором. Причина: ${reason}`,
+        isSystemMessage: true
+      });
+      
+      // Notify client
+      await this.createNotification({
+        userId: app.clientId,
+        title: 'Заявка отклонена',
+        message: `Ваша заявка №${id} была отклонена. Причина: ${reason}`,
+        type: 'error'
+      });
+    }
+    return app;
+  }
+
+  async sendApplicationToManagers(applicationId: number): Promise<void> {
+    const application = this.applications.find(app => app.id === applicationId);
+    if (!application) return;
+
+    const managers = await this.getAllManagers();
+    const compatibleCompanies = await this.getCompatibleCompanies(application);
+    
+    // Find managers from compatible companies
+    for (const manager of managers) {
+      const hasCompatibleCompany = compatibleCompanies.some(company => 
+        company.name === manager.companyName
+      );
+      
+      if (hasCompatibleCompany) {
+        await this.createNotification({
+          userId: manager.id,
+          title: 'Новая заявка',
+          message: `Поступила новая заявка №${applicationId} на сумму ${application.objectCost} руб.`,
+          type: 'info'
+        });
+      }
+    }
+    
+    // Update application status
+    const app = this.applications.find(app => app.id === applicationId);
+    if (app) {
+      app.status = 'collecting_offers';
+    }
+  }
+
+  async getAllManagers(): Promise<User[]> {
+    return this.users.filter(user => user.userType === 'manager' && user.isActive);
   }
 }
 
