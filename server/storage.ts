@@ -1,11 +1,4 @@
 import {
-  users,
-  leasingApplications,
-  leasingOffers,
-  leasingCompanies,
-  cars,
-  documents,
-  notifications,
   type User,
   type InsertUser,
   type InsertLeasingApplication,
@@ -20,8 +13,6 @@ import {
   type Notification,
   type LeasingCompany,
 } from "@shared/schema";
-import { db } from "./db";
-import { eq, and, desc, asc, or, like, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -69,157 +60,218 @@ export interface IStorage {
   markNotificationAsRead(id: number): Promise<void>;
 }
 
-export class DatabaseStorage implements IStorage {
+// In-memory storage implementation for development
+export class MemStorage implements IStorage {
+  private users: User[] = [];
+  private applications: LeasingApplication[] = [];
+  private offers: LeasingOffer[] = [];
+  private companies: LeasingCompany[] = [];
+  private cars: Car[] = [];
+  private documents: Document[] = [];
+  private notifications: Notification[] = [];
+  private nextId = 1;
+
+  constructor() {
+    // Initialize with some sample companies
+    this.companies = [
+      {
+        id: 1,
+        name: "AutoLeasing Pro",
+        description: "Professional vehicle leasing services",
+        minAmount: 10000,
+        maxAmount: 500000,
+        isActive: true,
+        interestRate: 5.5,
+        maxLeasingTerm: 60,
+        requirements: JSON.stringify({
+          minCreditScore: 600,
+          minIncome: 30000,
+          documents: ["passport", "income"]
+        }),
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 2,
+        name: "FlexiLease Solutions",
+        description: "Flexible leasing options for all needs",
+        minAmount: 5000,
+        maxAmount: 300000,
+        isActive: true,
+        interestRate: 6.0,
+        maxLeasingTerm: 48,
+        requirements: JSON.stringify({
+          minCreditScore: 550,
+          minIncome: 25000,
+          documents: ["passport", "income", "employment"]
+        }),
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    // Initialize with sample cars
+    this.cars = [
+      {
+        id: 1,
+        brand: "Toyota",
+        model: "Camry",
+        year: 2024,
+        price: "35000",
+        engine: "2.5L 4-cylinder",
+        transmission: "Automatic",
+        drive: "FWD",
+        isNew: true,
+        status: "available",
+        supplierId: 1,
+        images: JSON.stringify(["/api/placeholder/car1.jpg"]),
+        specifications: JSON.stringify({
+          fuel: "Gasoline",
+          mpg: "32/41",
+          safety: "5-star",
+          warranty: "3 years"
+        }),
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 2,
+        brand: "Honda",
+        model: "Accord",
+        year: 2024,
+        price: "38000",
+        engine: "1.5L Turbo",
+        transmission: "CVT",
+        drive: "FWD",
+        isNew: true,
+        status: "available",
+        supplierId: 1,
+        images: JSON.stringify(["/api/placeholder/car2.jpg"]),
+        specifications: JSON.stringify({
+          fuel: "Gasoline",
+          mpg: "30/38",
+          safety: "5-star",
+          warranty: "3 years"
+        }),
+        createdAt: new Date().toISOString()
+      }
+    ];
+  }
+
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return this.users.find(user => user.id === id);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    return this.users.find(user => user.username === username);
   }
 
   async createUser(userData: InsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .returning();
+    const user: User = {
+      id: this.nextId++,
+      ...userData,
+      isActive: true,
+      createdAt: new Date().toISOString()
+    };
+    this.users.push(user);
     return user;
   }
 
   // Application operations
   async createApplication(application: InsertLeasingApplication): Promise<LeasingApplication> {
-    const [newApplication] = await db
-      .insert(leasingApplications)
-      .values(application)
-      .returning();
-    return newApplication;
+    const app: LeasingApplication = {
+      id: this.nextId++,
+      ...application,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    this.applications.push(app);
+    return app;
   }
 
   async getApplicationsByClient(clientId: number): Promise<LeasingApplication[]> {
-    return await db
-      .select()
-      .from(leasingApplications)
-      .where(eq(leasingApplications.clientId, clientId))
-      .orderBy(desc(leasingApplications.createdAt));
+    return this.applications.filter(app => app.clientId === clientId);
   }
 
   async getApplicationsByAgent(agentId: number): Promise<LeasingApplication[]> {
-    return await db
-      .select()
-      .from(leasingApplications)
-      .where(eq(leasingApplications.agentId, agentId))
-      .orderBy(desc(leasingApplications.createdAt));
+    return this.applications.filter(app => app.agentId === agentId);
   }
 
   async getApplication(id: number): Promise<LeasingApplication | undefined> {
-    const [application] = await db
-      .select()
-      .from(leasingApplications)
-      .where(eq(leasingApplications.id, id));
-    return application;
+    return this.applications.find(app => app.id === id);
   }
 
   async updateApplicationStatus(id: number, status: string): Promise<LeasingApplication | undefined> {
-    const [application] = await db
-      .update(leasingApplications)
-      .set({ status, updatedAt: new Date() })
-      .where(eq(leasingApplications.id, id))
-      .returning();
-    return application;
+    const app = this.applications.find(app => app.id === id);
+    if (app) {
+      app.status = status;
+    }
+    return app;
   }
 
   async getAllApplications(): Promise<LeasingApplication[]> {
-    return await db
-      .select()
-      .from(leasingApplications)
-      .orderBy(desc(leasingApplications.createdAt));
+    return this.applications;
   }
 
   // Offer operations
   async createOffer(offer: InsertLeasingOffer): Promise<LeasingOffer> {
-    const [newOffer] = await db
-      .insert(leasingOffers)
-      .values(offer)
-      .returning();
+    const newOffer: LeasingOffer = {
+      id: this.nextId++,
+      ...offer,
+      isSelected: false,
+      createdAt: new Date().toISOString()
+    };
+    this.offers.push(newOffer);
     return newOffer;
   }
 
   async getOffersByApplication(applicationId: number): Promise<LeasingOffer[]> {
-    return await db
-      .select()
-      .from(leasingOffers)
-      .where(eq(leasingOffers.applicationId, applicationId))
-      .orderBy(asc(leasingOffers.monthlyPayment));
+    return this.offers.filter(offer => offer.applicationId === applicationId);
   }
 
   async selectOffer(offerId: number): Promise<LeasingOffer | undefined> {
-    // First, unselect all other offers for this application
-    const [offer] = await db
-      .select()
-      .from(leasingOffers)
-      .where(eq(leasingOffers.id, offerId));
-    
+    const offer = this.offers.find(offer => offer.id === offerId);
     if (offer) {
-      await db
-        .update(leasingOffers)
-        .set({ isSelected: false })
-        .where(eq(leasingOffers.applicationId, offer.applicationId));
-      
-      // Select the chosen offer
-      const [selectedOffer] = await db
-        .update(leasingOffers)
-        .set({ isSelected: true })
-        .where(eq(leasingOffers.id, offerId))
-        .returning();
-      
-      return selectedOffer;
+      offer.isSelected = true;
+      // Unselect other offers for the same application
+      this.offers.forEach(o => {
+        if (o.applicationId === offer.applicationId && o.id !== offerId) {
+          o.isSelected = false;
+        }
+      });
     }
-    return undefined;
+    return offer;
   }
 
   // Company operations
   async getAllCompanies(): Promise<LeasingCompany[]> {
-    return await db
-      .select()
-      .from(leasingCompanies)
-      .where(eq(leasingCompanies.isActive, true))
-      .orderBy(asc(leasingCompanies.name));
+    return this.companies.filter(company => company.isActive);
   }
 
   async getCompatibleCompanies(application: LeasingApplication): Promise<LeasingCompany[]> {
-    // Simplified version - return all active companies for now
-    return await db
-      .select()
-      .from(leasingCompanies)
-      .where(eq(leasingCompanies.isActive, true));
+    const amount = parseFloat(application.objectCost || '0');
+    return this.companies.filter(company => 
+      company.isActive &&
+      (!company.minAmount || amount >= company.minAmount) &&
+      (!company.maxAmount || amount <= company.maxAmount)
+    );
   }
 
   // Car operations
   async createCar(car: InsertCar): Promise<Car> {
-    const [newCar] = await db
-      .insert(cars)
-      .values(car)
-      .returning();
+    const newCar: Car = {
+      id: this.nextId++,
+      ...car,
+      createdAt: new Date().toISOString()
+    };
+    this.cars.push(newCar);
     return newCar;
   }
 
   async getAllCars(): Promise<Car[]> {
-    return await db
-      .select()
-      .from(cars)
-      .where(eq(cars.status, "available"))
-      .orderBy(desc(cars.createdAt));
+    return this.cars;
   }
 
   async getCarsBySupplier(supplierId: number): Promise<Car[]> {
-    return await db
-      .select()
-      .from(cars)
-      .where(eq(cars.supplierId, supplierId))
-      .orderBy(desc(cars.createdAt));
+    return this.cars.filter(car => car.supplierId === supplierId);
   }
 
   async searchCars(filters: {
@@ -230,75 +282,57 @@ export class DatabaseStorage implements IStorage {
     year?: number;
     isNew?: boolean;
   }): Promise<Car[]> {
-    const conditions = [eq(cars.status, "available")];
-
-    if (filters.brand) {
-      conditions.push(like(cars.brand, `%${filters.brand}%`));
-    }
-    if (filters.model) {
-      conditions.push(like(cars.model, `%${filters.model}%`));
-    }
-    if (filters.minPrice) {
-      conditions.push(gte(cars.price, filters.minPrice.toString()));
-    }
-    if (filters.maxPrice) {
-      conditions.push(lte(cars.price, filters.maxPrice.toString()));
-    }
-    if (filters.year) {
-      conditions.push(eq(cars.year, filters.year));
-    }
-    if (filters.isNew !== undefined) {
-      conditions.push(eq(cars.isNew, filters.isNew));
-    }
-
-    return await db
-      .select()
-      .from(cars)
-      .where(and(...conditions))
-      .orderBy(desc(cars.createdAt));
+    return this.cars.filter(car => {
+      if (filters.brand && car.brand.toLowerCase() !== filters.brand.toLowerCase()) return false;
+      if (filters.model && car.model.toLowerCase() !== filters.model.toLowerCase()) return false;
+      if (filters.year && car.year !== filters.year) return false;
+      if (filters.isNew !== undefined && car.isNew !== filters.isNew) return false;
+      if (filters.minPrice && parseFloat(car.price) < filters.minPrice) return false;
+      if (filters.maxPrice && parseFloat(car.price) > filters.maxPrice) return false;
+      return true;
+    });
   }
 
   // Document operations
   async createDocument(document: InsertDocument): Promise<Document> {
-    const [newDocument] = await db
-      .insert(documents)
-      .values(document)
-      .returning();
-    return newDocument;
+    const newDoc: Document = {
+      id: this.nextId++,
+      ...document,
+      createdAt: new Date().toISOString()
+    };
+    this.documents.push(newDoc);
+    return newDoc;
   }
 
   async getDocumentsByApplication(applicationId: number): Promise<Document[]> {
-    return await db
-      .select()
-      .from(documents)
-      .where(eq(documents.applicationId, applicationId))
-      .orderBy(desc(documents.createdAt));
+    return this.documents.filter(doc => doc.applicationId === applicationId);
   }
 
   // Notification operations
   async createNotification(notification: InsertNotification): Promise<Notification> {
-    const [newNotification] = await db
-      .insert(notifications)
-      .values(notification)
-      .returning();
+    const newNotification: Notification = {
+      id: this.nextId++,
+      ...notification,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+    this.notifications.push(newNotification);
     return newNotification;
   }
 
   async getUserNotifications(userId: number): Promise<Notification[]> {
-    return await db
-      .select()
-      .from(notifications)
-      .where(eq(notifications.userId, userId))
-      .orderBy(desc(notifications.createdAt))
-      .limit(50);
+    return this.notifications
+      .filter(notification => notification.userId === userId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 50);
   }
 
   async markNotificationAsRead(id: number): Promise<void> {
-    await db
-      .update(notifications)
-      .set({ isRead: true })
-      .where(eq(notifications.id, id));
+    const notification = this.notifications.find(n => n.id === id);
+    if (notification) {
+      notification.isRead = true;
+    }
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MemStorage();

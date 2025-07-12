@@ -1,15 +1,9 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+// Database configuration for Replit environment
+// Using in-memory storage for development, can be switched to PostgreSQL later
+
 import * as schema from "@shared/schema";
 
-neonConfig.webSocketConstructor = ws;
-
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
-
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle({ client: pool, schema });
+// For now, we'll use in-memory storage and bypass database initialization
+// The storage layer will handle all data operations
+export const db = null; // Placeholder - storage layer handles all operations
+export const pool = null; // Placeholder - not needed with in-memory storage
